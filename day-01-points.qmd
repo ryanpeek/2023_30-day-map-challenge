@@ -71,12 +71,12 @@ p1 <- ggplot() +
     geom_sf(data=west_st)+
     geom_sf(data=ppine_sf, fill="gold", pch=21) +
     ggthemes::theme_map() +
-    labs(title="North American Porcupines<br>in the West",
+    labs(title="North American Porcupines",
          subtitle = "#30DayMapChallenge • Day 01 • Points",
          caption="Data from iNaturalist • R 4.3.1 • Ryan Peek") +
     theme(
       plot.title = element_markdown(
-        family = "Luminari", size = 21),
+        family = "Chomsky", size = 21),
       plot.caption = element_markdown(family="Roboto", size=12),
       plot.subtitle = element_markdown(family="Roboto", size=12))
 ```
@@ -98,6 +98,6 @@ ggdraw() +
              hjust = 0.85, vjust = 0.85, 
              halign = 1, valign = 1, width = 0.2)
 
-#ggsave(filename = "figs/day01-points.png", width = 8, height = 6, dpi=300, units = "in", bg = "white")
+ggsave(filename = "figs/day01-points.png", width = 8, height = 6, dpi=300, units = "in", bg = "white")
 ```
 
