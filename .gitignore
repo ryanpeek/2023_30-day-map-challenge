@@ -50,3 +50,6 @@ rsconnect/
 
 # html final
 *html
+
+# osx
+.DS_Store

@@ -1,0 +1,103 @@
+---
+title: '2023 30-day Map Challenge • Day 01 • Prickly Points'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+code-fold: true
+format: 
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    toc-title: Contents
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Prickly Points
+
+Where in the US have porcupines been observed? First we can us the {tigris} package to get a US boundary and then use that to download any iNaturalist records for porcupines.
+
+![](https://upload.wikimedia.org/wikipedia/commons/8/83/Porcupine-BioDome.jpg)
+
+```{r}
+#| label: boundaries-data
+#| message: false
+#| warning: false
+
+library(sf)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(dplyr)
+
+west_st <- tigris::states() |> filter(STUSPS %in% c("CA","OR","WA","NV","ID"))
+west_co <- tigris::counties(state = c("CA","OR","WA","NV","ID"), progress_bar=FALSE)
+
+```
+
+Then download North American Porcupine records from iNaturalist. We'll specify we only want records that are georeferenced, and research quality, and use the western states boundaries.
+
+```{r}
+#| label: iNat-data
+library(rinat)
+
+ppine <- get_inat_obs(query="North American Porcupine", bounds = west_st, geo = TRUE, maxresults = 5000, quality = "research")
+
+```
+
+```{r}
+#| label: plot-iNat
+library(tidyverse)
+library(ggthemes)
+library(ggtext)
+library(cowplot)
+
+# make it spatial
+ppine_sf <- ppine |>
+  st_as_sf(coords=c("longitude","latitude"), crs=4326) |> 
+  filter(common_name=="North American Porcupine")
+  
+p1 <- ggplot() +
+    geom_sf(data=west_st)+
+    geom_sf(data=ppine_sf, fill="gold", pch=21) +
+    ggthemes::theme_map() +
+    labs(title="North American Porcupines<br>in the West",
+         subtitle = "#30DayMapChallenge • Day 01 • Points",
+         caption="Data from iNaturalist • R 4.3.1 • Ryan Peek") +
+    theme(
+      plot.title = element_markdown(
+        family = "Luminari", size = 21),
+      plot.caption = element_markdown(family="Roboto", size=12),
+      plot.subtitle = element_markdown(family="Roboto", size=12))
+```
+
+
+```{r}
+#| label: plot-iNat-wphoto
+#| fig-column: body-outset-left
+
+library(tidyverse)
+library(ggthemes)
+library(ggtext)
+library(cowplot)
+
+ggdraw() + 
+  draw_plot(p1) +
+  draw_image(image = "https://upload.wikimedia.org/wikipedia/commons/8/83/Porcupine-BioDome.jpg",
+             x = 0.88, y = 0.61, 
+             hjust = 0.85, vjust = 0.85, 
+             halign = 1, valign = 1, width = 0.2)
+
+#ggsave(filename = "figs/day01-points.png", width = 8, height = 6, dpi=300, units = "in", bg = "white")
+```
+
