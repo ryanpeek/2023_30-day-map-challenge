@@ -26,7 +26,7 @@ editor_options:
 
 ## Lines from Photos    
 
-It's Día de los Muertos today, and in honor of my grandmother who was a firecracker of a human, someone who loved to laugh, play games, and collected snowmen.
+It's Día de los Muertos today, and in honor of my grandmother who was a firecracker of a human, someone who loved to laugh, play games, and collected snowmen, this is a flow-field/lines mapping of a photo of my grandmother.
 
 ```{r}
 #| label: line-function
