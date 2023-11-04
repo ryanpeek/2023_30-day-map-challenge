@@ -5,14 +5,9 @@ execute:
   echo: false
   warning: false
   message: false
-code-fold: true
 format: 
   html:
     self-contained: true
-    toc: true
-    toc-depth: 2
-    toc-location: left
-    toc-title: Contents
     code-overflow: wrap
     code-fold: true
     code-tools: true
@@ -30,8 +25,6 @@ I do a lot of research and work with amphibians in my day job, find them fascina
 
 The etymology may be rooted in Middle English, where `tadpole` is from *tadde* “toad” and *pol* “head”. For  `pollywog`, it's possibly from the *pol* "head" and *wyglen* “to wiggle”.
 
- > porwigle, pollywiggle, pollywoggle, pollywog, potladle, pollywig, purwiggy
- 
 ## Data
 
 Expert sources were the internet, wikipedia, and dictionaries.
@@ -40,17 +33,17 @@ Expert sources were the internet, wikipedia, and dictionaries.
 #| label: the-data
 #| message: false
 #| warning: false
-#| echo: true
+#| echo: false
 
 library(tidyverse)
 dat <- tibble(
-  "term"=c("pollywog","tadpole", "pollywog", "tadpole", "dikkopje","kikkervisje","rumpetroll","holopadd","rompetrol", "rompetrol", "tadpole","halakarta","haletudse","grodyngel","nuijapää", "ultu","renacuajo","tzimbalu", "kaulquappe",
+  "term"=c("pollywog", "pollywog", "tadpole", "dikkopje","kikkervisje","rumpetroll","holopadd","rompetrol", "rompetrol", "tadpole","halakarta","haletudse","grodyngel","nuijapää", "ultu","renacuajo","tzimbalu", "kaulquappe",
            "kijanka","girino","mormoloc",
            "iribaş","пуголовок","girino","têtard",
            "tornapa","penbwl","ot teny", "kēdǒu", "tāwhana","kiluwiluwi"), 
-  "country_loc"=c("Canada", "United States", "United States", "United States", "Netherlands","Netherlands", "Norway", "Sweden", "Bulgaria", "Romania", "New Zealand", "Iceland","Denmark", "Sweden","Finland", "Ecuador","Bolivia", "Nicaragua", "Germany",
+  "country_loc"=c("Canada", "United States", "United States", "Netherlands","Netherlands", "Norway", "Sweden", "Bulgaria", "Romania", "New Zealand", "Iceland","Denmark", "Sweden","Finland", "Ecuador","Bolivia", "Nicaragua", "Germany",
                "Poland","Portugal","Romania","Turkey","Ukraine","Italy","France","Ireland","United Kingdom","Lao PDR", "China", "New Zealand","Zimbabwe"),
-  "definition"=c("larvae", "larvae", "larvae","larvae",
+  "definition"=c("larvae", "larvae","larvae",
                  "little fathead",
                  "little frog fish","rump troll", 
                  "tail toad", "tail troll","tail troll",
@@ -62,9 +55,18 @@ dat <- tibble(
 
 ```
 
+```{r}
+#| label: table
+
+knitr::kable(dat)
+```
+
+
 
 ```{r}
 #| label: plot-image
+#| column: screen
+#| out-width: 100%
 #| message: false
 #| echo: false
 #| warning: false
@@ -73,7 +75,7 @@ library(rnaturalearth)
 library(sf)
 
 wrld <- ne_countries(scale = "medium", returnclass = "sf")
-st_crs(wrld)
+#st_crs(wrld)
 # use eqearth projection
 wrld <- st_transform(wrld, crs = "+proj=eqearth")
 
@@ -84,14 +86,18 @@ wrld_polly <- wrld |> #filter(sovereignt %in% dat$country_loc) |>
 
 # plot
 ggplot() +
-  geom_sf(data=wrld, fill=alpha("gray40", 0.3)) +
-  geom_sf(data=wrld_polly, fill=alpha(col="orange", 0.7)) +
-  ggrepel::geom_label_repel(data=wrld_polly,
+  geom_sf(data=wrld, fill=alpha("gray70", 0.7), color=alpha("gray10", 0.5)) +
+  geom_sf(data=wrld_polly, fill=alpha("#5DC863FF", 0.5), color=alpha("gray10", 0.7), linewidth=0.5) +
+  ggrepel::geom_text_repel(data=wrld_polly,
                            aes(label=term, geometry=geometry), 
-                           stat = "sf_coordinates", force_pull = 0.5, 
-                           force = .1, min.segment.length = .5, size=2, max.overlaps = 30,
+                           stat = "sf_coordinates", 
+                           force_pull = 0.3, force = .5,
+                           min.segment.length = .2, size=4.5,
+                           color="white",
+                           bg.color = "#3B528BFF", bg.r = 0.12,
+                           max.overlaps = 30,
                            segment.size  = 0.2,
-    segment.color = "grey50") +
+                           segment.color = "grey50") +
   ggspatial::annotation_north_arrow() +
   labs(
     x = NULL, y = NULL,
@@ -99,10 +105,13 @@ ggplot() +
     subtitle = "#30DayMapChallenge • Day-03 • Polly-gons",
     caption = "+proj=eqearth • R 4.3.1 • Ryan Peek \n <https://github.com/ryanpeek/2023_30-day-map-challenge/>",
   ) +
-  hrbrthemes::theme_ipsum_rc(grid="") +
-  theme(axis.text=element_blank())
+  hrbrthemes::theme_ft_rc(grid="") +
+  theme(axis.text=element_blank(),
+        plot.subtitle = element_text(size=16),
+        plot.caption = element_text(color="gray90", size=12))
 
-ggsave(filename = "figs/day03-pollygons.png", width = 11, height = 8.5, dpi=300, bg = "white")
+#save
+#ggsave(filename = "figs/day03-pollygons.png", width = 11, height = 8.5, dpi=300, bg = "white")
 
 
 ```
