@@ -1,0 +1,138 @@
+---
+title: '2023 30-day Map Challenge • Day 04 • Bad Map'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Bad Map    
+
+Timezones are scary. Having to switch our clocks twice a year is scarier.
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: false
+
+library(tidyverse)
+library(lutz)
+#library(tigris)
+#options(tigris_use_cache = TRUE)
+library(sf)
+
+if(!file.exists("data_raw/tz.zip")){
+  ## Get the full time zone geojson from https://github.com/evansiroky/timezone-boundary-builder
+  download.file("https://github.com/evansiroky/timezone-boundary-builder/releases/download/2019a/timezones-with-oceans.geojson.zip",
+                destfile = "data_raw/tz.zip")
+  unzip("data_raw/tz.zip", junkpaths = TRUE, exdir = "data_raw/")
+}
+
+# get US boundaries
+#us_states <- states(cb = TRUE, resolution = "20m")  
+#us_states_outside <- states(cb = TRUE, resolution = "20m")  #|> 
+  #shift_geometry(position = "outside")
+#plot(us_states$geometry)
+
+```
+
+```{r}
+#| label: timezone-global
+#| message: false
+#| warning: false
+#| echo: false
+
+library(glue)
+library(ggtext)
+library(showtext)
+font_add_google("Rock Salt", "rock")
+font_add_google("Roboto Slab")
+#font_files() |> View()
+#font_families()
+showtext_auto()
+
+# data
+tz_full <- read_sf("data_raw/combined-with-oceans.json")
+
+# check plots
+#tz_plot("America/Vancouver")
+#tz_plot("Europe/London")
+
+# drop the etc and antartica options for now
+tz_filt <- tz_full |> 
+  filter(!grepl("^Etc/", tzid))
+
+# make a crazy timezone color label
+timezone_lab <- glue("<span style='color:#D55E00'>T</span><span style='color:#31688EFF'>i</span><span style='color:#35B779FF'>m</span><span style='color:#FDE725FF'>e</span><span style='color:#000004FF'>z</span><span style='color:#000000'>o</span><span style='color:#BB3754FF'>n</span><span style='color:#00BFFF'>e</span><span style='color:#440154FF'>s</span>")
+
+
+# plot timezones globally
+g1 <- ggplot() + 
+  geom_sf(data=tz_filt, aes(fill=tzid), 
+          alpha=0.7, show.legend = FALSE) +
+  scale_fill_viridis_d() + 
+  hrbrthemes::theme_ipsum_rc(grid="") +
+  labs(title=glue("{timezone_lab} of the World"),
+       subtitle = "#30DayMapChallenge • Day-04 • Bad maps",
+    caption = "Timezone data from {lutz} package\nRyan Peek • <https://github.com/ryanpeek/2023_30-day-map-challenge/>",
+  ) +
+  theme(plot.title = 
+          ggtext::element_markdown(
+            family = "rock",
+            face = "bold", size=36),
+        plot.subtitle = 
+          element_text(family="Roboto Slab", size=24),
+        plot.caption = 
+          element_text(family="Roboto Slab", size=20))
+  
+#ggsave(filename = "figs/day04-badmap.png", width = 11, height = 8.5, dpi=300, bg = "white")
+#knitr::plot_crop("figs/day04-badmap.png")
+# trim white space
+```
+
+
+```{r}
+#| label: plot-clock
+#| column: page
+#| out-width: 100%
+#| message: false
+#| echo: false
+#| warning: false
+
+library(patchwork)
+library(magick)
+img_url <- "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Dal%C3%AD%2C_Perfil_del_tiempo%2C_Vroclavo%2C_7.jpeg/220px-Dal%C3%AD%2C_Perfil_del_tiempo%2C_Vroclavo%2C_7.jpeg"
+
+img_in <- image_read(img_url)
+#print(img_in)
+img_png <- grid::rasterGrob(img_in, interpolate = TRUE) # change
+
+patch1 <- g1 +
+    inset_element(img_png, left = 0.75, bottom=0.77, align_to = "full",
+                  right = 0.95, top = 0.95, on_top = FALSE)
+
+ggsave(filename = "figs/day04-badmap.png", width = 11, height = 8.5, dpi=300, bg = "white")
+
+# trim white space
+knitr::plot_crop("figs/day04-badmap.png")
+
+knitr::include_graphics("figs/day04-badmap.png")
+
+```
+
