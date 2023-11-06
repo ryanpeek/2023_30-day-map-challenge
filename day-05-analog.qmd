@@ -1,0 +1,125 @@
+---
+title: '2023 30-day Map Challenge • Day 05 • Analog Island'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Analog Map    
+
+When CA was an island...in 1650.
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: false
+
+library(tidyverse)
+library(rnaturalearth)
+library(sf)
+
+# the link
+# https://en.wikipedia.org/wiki/File:California_island_Vinckeboons5.jpg
+# Johannes Vingboons, 1650
+# Library of Congress, The Atlantic World: America and the Netherlands
+na_shp <- ne_countries(continent = "North America", returnclass = "sf")
+#plot(na_shp$geometry, add=TRUE)
+#plot(ca_island$geometry)
+
+# data read the shp
+ca_island <- st_read("~/Desktop/ca_island_1650.kml")
+
+# now intersect
+ca_buff <- st_as_sfc(st_bbox(ca_island, dist = 1))
+shoreline_crop <- st_intersection(na_shp, ca_buff)
+
+```
+
+```{r}
+#| label: west-coast-map
+#| message: false
+#| warning: false
+#| echo: false
+
+library(glue)
+library(ggtext)
+library(showtext)
+font_add_google("Lobster Two", "lobster")
+font_add_google("Abel", "abel")
+showtext_auto()
+
+
+# plot timezones globally
+g1 <- ggplot() + 
+  geom_sf(data=shoreline_crop, color="gray10",linewidth=0.4, bg=alpha("gray30", 0.3)) +
+  geom_sf(data=ca_island, fill="orange", alpha=0.7, show.legend = FALSE) +
+  hrbrthemes::theme_ipsum_rc(grid="") +
+  theme(plot.title = 
+          ggtext::element_markdown(
+            family = "lobster", size=38),
+        plot.subtitle = 
+          element_text(family="cedar", size=28),
+        plot.caption = 
+          element_text(family="Roboto Slab", size=18))
+
+g1  
+#ggsave(filename = "figs/day04-badmap.png", width = 11, height = 8.5, dpi=300, bg = "white")
+#knitr::plot_crop("figs/day04-badmap.png")
+# trim white space
+```
+
+
+```{r}
+#| label: plot-img
+#| column: page
+#| out-width: 100%
+#| message: false
+#| echo: false
+#| warning: false
+
+library(patchwork)
+library(magick)
+img_url <- "https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/California_island_Vinckeboons5.jpg/2560px-California_island_Vinckeboons5.jpg"
+
+img_in <- image_read(img_url)
+#print(img_in)
+img_png <- grid::rasterGrob(img_in, interpolate = TRUE) # change
+
+g1 + img_png + 
+  plot_annotation(title = "CA Mapped as an Island (circa 1650)",
+                  subtitle = "#30DayMapChallenge • Day-05 • Analog map",
+    
+                  caption = "Data digitized from: <http://hdl.loc.gov/loc.gmd/g3291s.mf000074> ", theme=theme(plot.title = 
+          ggtext::element_markdown(
+            family = "lobster", size=44),
+        plot.subtitle = 
+          element_text(family="cedar", size=34),
+        plot.caption = 
+          element_text(family="mono", size=20)))
+
+ggsave(filename = "figs/day05-analog.png", width = 11, height = 8.5, dpi=300, bg = "white")
+
+# trim white space
+#knitr::plot_crop("figs/day05-analog_cropped.png")
+
+knitr::include_graphics("figs/day05-analog.png")
+
+```
+
