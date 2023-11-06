@@ -118,6 +118,9 @@ ggsave(filename = "figs/day05-analog.png", width = 11, height = 8.5, dpi=300, bg
 
 # trim white space
 #knitr::plot_crop("figs/day05-analog_cropped.png")
+# add annotation outside of R:
+#annot <- "Some of the first maps of California (circa 1650), indicated it was an island. This map was created by Joan Vinckeboons (Library of Congress: https:// Iccn.loc.gov/99443375). The map below was digitized and *approximately* orto-referenced, just for fun."
+
 
 knitr::include_graphics("figs/day05-analog.png")
 
