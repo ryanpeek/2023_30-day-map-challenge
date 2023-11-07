@@ -56,4 +56,5 @@ rsconnect/
 
 # data raw
 data_raw/*
-code/sndbox.R
+sndbox*
+code/sndbox*
