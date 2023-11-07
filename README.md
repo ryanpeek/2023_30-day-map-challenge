@@ -38,3 +38,10 @@ Timezones are scary. Having to switch our clocks twice a year is scarier.
 When CA was an island...in 1650.
 
 ![](figs/day05-analog.png)
+
+
+### Day-06
+
+Light intensity at night in India, based on Nature article: https://www.nature.com/articles/s41597-020-0510-y.
+
+![](figs/day06-asia.png)
