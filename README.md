@@ -45,3 +45,13 @@ When CA was an island...in 1650.
 Light intensity at night in India, based on Nature article: https://www.nature.com/articles/s41597-020-0510-y.
 
 ![](figs/day06-asia-lights.png)
+
+### Day-07
+
+Maps tell stories as well as help one navigate. While we have many maps of post-colonial trails, it is much harder to find data that documents Indigenous places, trails, and knowledge. It is not that these don't exist, they just don't get put on maps. 
+
+A recent effort to provide an interactive GIS map of indigenous resources to help advance knowledge of Indigenous ancestral lands is called [Native Lands National Trails](https://experience.arcgis.com/experience/c98b415eb4b44081a6dcb9e824785846/page/NLNT-Homepage/). This is in part to help advance National Trails System knowledge of Indigenous ancestral Lands and increase partnerships and collaboration with Indigenous Communities along National Scenic and National Historic Trails.
+
+I highly recommend checking out the map and reading the resources section and read the acknowledgement statement.^[Also look at the beautiful logo designed by Autry Lomahongva!].
+
+![](figs/day07-navigation.png)
