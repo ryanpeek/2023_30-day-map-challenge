@@ -1,0 +1,195 @@
+---
+title: '2023 30-day Map Challenge • Day 08 • Africa'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Africa: Currents
+
+Inspired by this great [post](https://semba-blog.netlify.app/10/23/2018/wind-in-the-western-indian-ocean-region/) by Masumbuko Semba, I wanted to recreate a slightly revised plot of ocean currents off the coast of South Africa.
+ 
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+# ocean data
+library(rerddap)
+library(lubridate)
+library(oce)
+library(gganimate)
+library(RColorBrewer)
+library(tidyverse)
+library(hrbrthemes)
+library(rnaturalearth)
+library(glue)
+library(terra)
+library(ggtext)
+library(sf)
+library(patchwork)
+sf::sf_use_s2(FALSE)
+library(showtext)
+extrafont::fonts() # get fonts avail
+font_add_google("Space Mono")
+#showtext_auto()
+
+# Get Data ----------------------------------------------------------------
+
+# get an area to crop by
+country_name <- c("South Africa", "Namibia", "Botswana", "Lesotho", "eSwatini", "Mozambique","Zimbabwe") 
+countries <- rnaturalearth::ne_countries(continent = "Africa", returnclass = "sf", country = country_name)
+plot(countries$geometry)
+
+# get centroids
+af_centroids <- countries |> st_centroid() |> 
+  st_coordinates() |> as_tibble() |> rename(lon = 1, lat = 2)
+
+# drop the geometry and retain the attribute information
+countries_df <- st_drop_geometry(countries)
+
+# bind the country centroid information 
+countries_cent <- bind_cols(af_centroids, countries_df) |> 
+  select(lon,lat, name, gu_a3)
+
+# plot
+#plot(countries$geometry) 
+#points(countries_cent$lon, countries_cent$lat, pch=16, col="orange")
+
+# nicer plot
+ggplot() + 
+  geom_sf(data = spData::world, color = 1, fill = "gray20")+
+  geom_sf(data=countries, fill=NA, color="gray30", lwd=0.7) +
+  coord_sf(xlim = c(11,37), ylim = c(-40,-22)) +
+  hrbrthemes::theme_ft_rc(base_family = "Space Mono")+
+  ggrepel::geom_text_repel(data = countries_cent, 
+            aes(x = lon, y = lat, label = name), color="white",
+            nudge_y = -0.01, min.segment.length = 0.4)+
+  labs(x = NULL, y = NULL) +
+  theme(panel.background = element_rect(fill = "steelblue"))
+
+## obtain metadata of the dataset
+# see here for all griddap: https://upwell.pfeg.noaa.gov/erddap/griddap/index.html?page=8&itemsPerPage=1000
+
+#geoinfo <- info("erdTAgeo1day_LonPM180") # 1992 to 2012
+geoinfo <- info("noaa_aoml_1db3_9713_eaa7") # 2016 to current
+geoinfo
+
+## set spatial and temporal extents
+lon_ext <- c(11,37)
+lat_ext <- c(-40,-22)
+#time <- c("2002-11-01", "2012-12-01")
+time <- c("2017-01-01", "2023-10-01")
+
+## download the data (it's big!!)
+geostrophic_dat <- griddap(geoinfo, longitude = lon_ext, 
+                           latitude = lat_ext, time = time, 
+                           fields = c("u_current", "v_current"))
+```
+
+## Tidy Data
+
+```{r}
+#| label: tidy-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+# calc current velocity
+sa_geostrophic <-  geostrophic_dat$data |> 
+  mutate(date = as.Date(time),
+         vel = sqrt(u_current^2 + v_current^2)) |> 
+  select(date, longitude, latitude, u = u_current, v = v_current, vel)
+# 29 million rows!!!
+
+# filter to a single year  
+sa_geostrophic_yr <- sa_geostrophic |>  
+  filter(date >= ymd(20220101), date < ymd(20230101))
+
+# decompose day, month, and year as separate variable from the date variable
+sa_geostrophic_yr <- sa_geostrophic_yr |> 
+  mutate(day = day(date), 
+         month = month(date),
+         year = year(date)) 
+
+## group current based on longitude, latitude and month
+sa_monthly <- sa_geostrophic_yr |> 
+  group_by(longitude, latitude, month) |> 
+  summarize(u = mean(u, na.rm = T),
+            v = mean(v, na.rm = T), 
+            vel= mean(vel, na.rm = T)) |> 
+  ungroup()
+```
+
+
+```{r}
+#| label: animate
+#| message: false
+#| warning: false
+#| echo: false
+#| eval: false
+
+## PLOTTTTTTT
+g1 <- ggplot() +
+  geom_raster(data = sa_monthly, 
+              aes(x = longitude, y = latitude, fill = vel), interpolate = TRUE) +
+  geom_sf(data=countries, fill="gray20", color="gray40", lwd=0.7) +
+  coord_sf(xlim = c(11,37), ylim = c(-40,-22)) +
+  scale_fill_gradientn("Velocity \n(m/s)", colours = oceColors9A(120))+
+  hrbrthemes::theme_ft_rc(base_family = "Space Mono", plot_title_size = 30,
+                          subtitle_size = 22, caption_size = 16)+
+  labs(x = NULL, y = NULL) +
+  theme(plot.subtitle = element_text(color="gray80"),
+        plot.caption = element_text(color="gray80"),
+        legend.text = element_text(color="gray80"),
+        plot.background = element_rect("#252a32"),
+        panel.grid.major = element_blank()) +
+  #      legend.key.height = unit(3, "lines"),
+  #      legend.position = c(.92,.25),
+  
+  labs(
+    title = "Mean Current Velocities: Month {round(frame_time, 0)}",
+    subtitle = "#30DayMapChallenge • Day-08 • Africa",
+    caption="R. Peek • data: noaa_aoml_1db3_9713_eaa7\n <https://github.com/ryanpeek/2023_30-day-map-challenge/>") +
+  transition_time(month) +
+  ease_aes('linear')
+g1
+
+# save
+#anim_save("figs/day08-africa.gif", g1, width = 1000, height = 1000)
+anim_save("figs/day08-africa_small.gif", g1, width = 800, height = 800)
+
+```
+
+```{r}
+#| label: show-plot
+#| message: false
+#| warning: false
+#| echo: false
+#| eval: true
+
+knitr::include_graphics("figs/day08-africa_small.gif")
+
+```
+
+
