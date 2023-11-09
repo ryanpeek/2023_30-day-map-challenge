@@ -55,3 +55,9 @@ A recent effort to provide an interactive GIS map of indigenous resources to hel
 I highly recommend checking out the map and reading the resources section and read the acknowledgement statement.^[Also look at the beautiful logo designed by Autry Lomahongva!].
 
 ![](figs/day07-navigation.png)
+
+### Day-08
+
+African ocean currents!
+
+![](figs/day08-africa_small.gif)
