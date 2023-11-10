@@ -1,0 +1,142 @@
+---
+title: '2023 30-day Map Challenge • Day 09 • Hexagons'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Hexagons: Connectivity
+
+30x30 connectivity layer in rayshader style. The 30x30 Areas of Conservation Emphasis (ACE) includes Connectivity. The [Terrestrial Connectivity dataset](https://www.californianature.ca.gov/datasets/CAnature::terrestrial-connectivity-ace/about) summarizes information on terrestrial connectivity by ACE hexagon including the presence of mapped corridors or linkages and the juxtaposition to large, contiguous, natural areas. This dataset was developed to support conservation planning efforts by allowing user to spatially evaluate the relative contribution of an area to terrestrial connectivity based on the results of statewide, regional, and other connectivity analyses.
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+library(hrbrthemes)
+library(glue)
+library(ggtext)
+library(sf)
+library(tigris)
+library(patchwork)
+sf::sf_use_s2(FALSE)
+library(showtext)
+#extrafont::fonts() # get fonts avail
+font_add_google("Hepta Slab")
+#showtext_auto()
+
+# Get Data ----------------------------------------------------------------
+
+# get an area to crop by
+ca <- tigris::states() |> filter(STUSPS=="CA")
+cnty <- tigris::counties(state="CA")
+# get centroids
+cnty_cent <- cnty |> st_centroid() |> 
+  st_coordinates() |> as_tibble() |> rename(lon = 1, lat = 2)
+cnty_df <- st_drop_geometry(cnty)
+cnty_cent <- bind_cols(cnty_cent, cnty_df) |> 
+  select(lon,lat, NAME, GEOID)
+
+# plot
+ggplot() + 
+  geom_sf(data=ca, fill="gray20") +
+  geom_sf(data=cnty, fill=NA, color="gray80", lwd=0.4) +
+  coord_sf(label_graticule = "")+
+  hrbrthemes::theme_ft_rc(base_family = "Hepta Slab")+
+  ggrepel::geom_text_repel(data = cnty_cent, 
+            aes(x = lon, y = lat, label = NAME), color="white",
+            nudge_y = -0.01, min.segment.length = 0.4)+
+  labs(x = NULL, y = NULL)
+
+# get 30x30 connectivity data here:
+# https://www.californianature.ca.gov/datasets/terrestrial-connectivity-ace/explore
+# download a geojson
+# https://services2.arcgis.com/Uq9r85Potqm3MfRV/arcgis/rest/services/biosds2734_fpu/FeatureServer
+
+ace_dat <- st_read("data_raw/Terrestrial_Connectivity_-_ACE.geojson")
+st_crs(ace_dat)
+
+
+```
+
+## Tidy Data
+
+```{r}
+#| label: tidy-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+## PLOTTTTTTT
+g1 <- ggplot() +
+  geom_sf(data= ca, fill=NA, color="gray50", lwd=0.7) +
+  geom_sf(data = ace_dat, aes(fill = Connectivity_rank), color=alpha("white",0)) +
+  scale_fill_viridis_c("Rank", option="A")+
+  hrbrthemes::theme_ft_rc(base_family = "Hepta Slab", plot_title_size = 24,
+                          subtitle_size = 18, caption_size = 12)+
+  labs(x = NULL, y = NULL) +
+  coord_sf(label_axes = "")+
+  theme(plot.subtitle = element_text(color="gray80"),
+        plot.caption = element_text(color="gray80"),
+        legend.text = element_text(color="gray80"),
+        plot.background = element_rect("#252a32"),
+        panel.grid.major = element_blank())+
+  labs(
+    title = "Terrestrial Connectivity Ranking",
+    subtitle = "#30DayMapChallenge • Day-09 • Hexagons",
+    caption="R. Peek • Data: 30x30 <https://www.californianature.ca.gov/> \n <https://github.com/ryanpeek/2023_30-day-map-challenge/>")
+
+g1
+
+
+```
+
+```{r}
+#| label: render-plot
+#| message: false
+#| warning: false
+#| echo: false
+#| eval: true
+library(rayshader)
+
+plot_gg(g1, width = 6, height = 9, multicore = TRUE, scale = 300, 
+        zoom = 0.4, theta = 340, phi = 40, windowsize = c(800, 1000),
+        fov = 90, max_error = 0.01, verbose = TRUE)
+
+# spin camera as you like
+#render_camera(fov = 90, zoom = 0.4, theta = 340, phi = 45)
+Sys.sleep(0.2)
+render_snapshot(filename = "figs/day09-hexagons.png")#, clear = TRUE)
+
+render_highquality(samples = 256, aperture=30, light = FALSE, 
+                   focal_distance = 1200, 
+                   ground_material = rayrender::diffuse(checkercolor = "grey10", sigma=90, noise = 0.9, checkerperiod = 0), 
+                   camera_lookat = c(0,-150,0))
+
+
+
+
+```
+
+
