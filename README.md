@@ -61,3 +61,9 @@ I highly recommend checking out the map and reading the resources section and re
 African ocean currents!
 
 ![](figs/day08-africa_small.gif)
+
+### Day-09
+
+30x30 Wildlife connectivity (in hexagons).
+
+![](figs/day09_hexagons_3d.png)

@@ -93,8 +93,8 @@ g1 <- ggplot() +
   geom_sf(data= ca, fill=NA, color="gray50", lwd=0.7) +
   geom_sf(data = ace_dat, aes(fill = Connectivity_rank), color=alpha("white",0)) +
   scale_fill_viridis_c("Rank", option="A")+
-  hrbrthemes::theme_ft_rc(base_family = "Hepta Slab", plot_title_size = 24,
-                          subtitle_size = 18, caption_size = 12)+
+  hrbrthemes::theme_ft_rc(base_family = "Hepta Slab", plot_title_size = 22,
+                          subtitle_size = 16, caption_size = 12)+
   labs(x = NULL, y = NULL) +
   coord_sf(label_axes = "")+
   theme(plot.subtitle = element_text(color="gray80"),
@@ -109,7 +109,23 @@ g1 <- ggplot() +
 
 g1
 
+g1_nolab <- ggplot() +
+  geom_sf(data= ca, fill=NA, color="gray50", lwd=0.7) +
+  geom_sf(data = ace_dat, aes(fill = Connectivity_rank), color=alpha("white",0)) +
+  scale_fill_viridis_c("Rank", option="A")+
+  hrbrthemes::theme_ft_rc(base_family = "Hepta Slab", plot_title_size = 24,
+                          subtitle_size = 18, caption_size = 12)+
+  labs(x = NULL, y = NULL) +
+  coord_sf(label_axes = "")+
+  theme(plot.subtitle = element_text(color="gray80"),
+        plot.caption = element_text(color="gray80"),
+        legend.text = element_text(color="gray80"),
+        plot.background = element_rect("#252a32"),
+        panel.grid.major = element_blank())+
+  labs(
+    caption="R. Peek • Data: 30x30 <https://www.californianature.ca.gov/>")
 
+g1_nolab
 ```
 
 ```{r}
@@ -120,23 +136,26 @@ g1
 #| eval: true
 library(rayshader)
 
-plot_gg(g1, width = 6, height = 9, multicore = TRUE, scale = 300, 
-        zoom = 0.4, theta = 340, phi = 40, windowsize = c(800, 1000),
-        fov = 90, max_error = 0.01, verbose = TRUE)
+plot_gg(g1_nolab, width = 6, height = 9, 
+        multicore = TRUE, scale = 300, 
+        zoom = 0.4, theta = 340, phi = 40, 
+        windowsize = c(800, 1000),
+        fov = 90, max_error = 0.01, verbose = TRUE, 
+        background = "#252a32",)
 
 # spin camera as you like
 #render_camera(fov = 90, zoom = 0.4, theta = 340, phi = 45)
 Sys.sleep(0.2)
-render_snapshot(filename = "figs/day09-hexagons.png")#, clear = TRUE)
-
-render_highquality(samples = 256, aperture=30, light = FALSE, 
-                   focal_distance = 1200, 
-                   ground_material = rayrender::diffuse(checkercolor = "grey10", sigma=90, noise = 0.9, checkerperiod = 0), 
-                   camera_lookat = c(0,-150,0))
-
-
-
+render_snapshot(filename = "figs/day09-hexagons_3d.png", background = "#252a32" )
 
 ```
 
+```{r}
+library(patchwork)
+my_image <-  png::readPNG("figs/day09-hexagons_3d.png")
+gall <- g1 + grid::rasterGrob(my_image) 
+
+ggsave(filename = glue("figs/day09_hexagons_3d.png"), width = 11, height = 8.5, dpi = 300)
+
+```
 
