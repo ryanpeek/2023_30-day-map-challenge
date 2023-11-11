@@ -30,7 +30,7 @@ editor_options:
 #| message: false
 #| warning: false
 #| echo: true
-#| eval: false
+#| eval: true
 
 library(tidyverse)
 library(hrbrthemes)
@@ -39,6 +39,7 @@ library(ggtext)
 library(sf)
 library(tigris)
 library(patchwork)
+library(colorspace)
 sf::sf_use_s2(FALSE)
 library(showtext)
 #extrafont::fonts() # get fonts avail
@@ -72,9 +73,8 @@ ggplot() +
 # https://www.californianature.ca.gov/datasets/terrestrial-connectivity-ace/explore
 # download a geojson
 # https://services2.arcgis.com/Uq9r85Potqm3MfRV/arcgis/rest/services/biosds2734_fpu/FeatureServer
-
 ace_dat <- st_read("data_raw/Terrestrial_Connectivity_-_ACE.geojson")
-st_crs(ace_dat)
+#st_crs(ace_dat)
 
 
 ```
@@ -101,6 +101,7 @@ g1 <- ggplot() +
         plot.caption = element_text(color="gray80"),
         legend.text = element_text(color="gray80"),
         plot.background = element_rect("#252a32"),
+        legend.position = c(0.1, 0.2),
         panel.grid.major = element_blank())+
   labs(
     title = "Terrestrial Connectivity Ranking",
@@ -129,33 +130,217 @@ g1_nolab
 ```
 
 ```{r}
+#| label: rayshade-prep
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+bb <- st_bbox(ace_dat)
+yind <- st_distance(st_point(c(bb[["xmin"]], bb[["ymin"]])),
+                    st_point(c(bb[["xmin"]], bb[["ymax"]])))
+xind <- st_distance(st_point(c(bb[["xmin"]], bb[["ymin"]])),
+                    st_point(c(bb[["xmax"]], bb[["ymin"]])))
+
+if (yind > xind) {
+  y_rat <- 1
+  x_rat <- xind / yind
+} else {
+  x_rat <- 1
+  y_rat <- yind / xind
+}
+
+size <- 4000 # was 8000
+rast <- stars::st_rasterize(ace_dat |>
+                       select(Connectivity_rank, geometry),
+                     nx = floor(size * x_rat), ny = floor(size * y_rat))
+
+
+mat <- matrix(rast$Connectivity_rank, nrow = floor(size * x_rat), ncol = floor(size * y_rat))
+
+```
+
+```{r}
+#| label: color-palette
+#| message: false
+#| warning: false
+#| echo: false
+#| eval: false
+
+
+# set up color palette
+library(rayshader)
+
+#pal <- "hiroshige"
+#colors <- met.brewer("Hiroshige", 12)
+pal <- "magma"
+colors <- viridis::magma(12)
+swatchplot(colors)
+
+texture <- grDevices::colorRampPalette(colors[9])(256)
+swatchplot(texture)
+
+# render test plot
+try(rgl::close3d())
+
+# Create the initial 3D object
+mat |>
+  height_shade(texture = texture) |>
+  plot_3d(heightmap = mat,
+          solid = FALSE,
+          soliddepth = 0,
+          # lower values exaggerate the height
+          z = 0.5 / (size / 1000),
+          # Set the location of the shadow (the floor)
+          # Same scale as your data, set however far below min preferred
+          shadowdepth = 0.5,
+          # Set window size small, if too big takes longer to build
+          windowsize = c(800,800),
+          # Phi is azimuth, like the angle of the sun.
+          # 90 degrees is directly above, 0 degrees is profile view.
+          phi = 90,
+          zoom = 1,
+          # `theta` is rotation of the map, 0 is north up
+          theta = 0,
+          background = "#252a32")
+
+# Use this to adjust the view after building the window object
+render_camera(phi = 40, fov=40, theta = 340)
+
+```
+
+
+```{r}
 #| label: render-plot
 #| message: false
 #| warning: false
 #| echo: false
-#| eval: true
-library(rayshader)
+#| eval: false
 
-plot_gg(g1_nolab, width = 6, height = 9, 
+plot_gg(g1_nolab, offset_edges = TRUE,
+        width = 8, height = 10, 
         multicore = TRUE, scale = 300, 
-        zoom = 0.4, theta = 340, phi = 40, 
-        windowsize = c(800, 1000),
-        fov = 90, max_error = 0.01, verbose = TRUE, 
+        zoom = 1, theta = 340, phi = 40, 
+        shadowdepth = -.05,
+        windowsize = c(1200, 1200),
+        fov = 40, max_error = 0.01, verbose = TRUE, 
         background = "#252a32",)
 
-# spin camera as you like
-#render_camera(fov = 90, zoom = 0.4, theta = 340, phi = 45)
 Sys.sleep(0.2)
-render_snapshot(filename = "figs/day09-hexagons_3d.png", background = "#252a32" )
+render_snapshot(filename = "figs/day09-hexagons_3d.png", 
+                background = "#252a32" )
+
+```
+
+```{r}
+#| label: render-highqual-plot
+#| message: false
+#| warning: false
+#| echo: false
+#| eval: false
+
+# render hi quality?
+outfile <- "temp/render.png"
+
+{
+  # Test write a PNG to ensure the file path is good.
+  # You don't want `render_highquality()` to fail after it's
+  # taken hours to render.
+  if (!file.exists(outfile)) {
+    png::writePNG(matrix(1), outfile)
+  }
+  # I like to track when I start the render
+  start_time <- Sys.time()
+  cat(glue("Start Time: {start_time}"), "\n")
+  render_highquality(
+    # We test-wrote to this file above, so we know it's good
+    outfile,
+    # See rayrender::render_scene for more info, but best
+    # sample method ('sobol') works best with values over 256
+    samples = 450,
+    preview = FALSE,
+    light = TRUE,
+    lightdirection = rev(c(230, 230, 225, 225)),
+    lightcolor = c(colors[6], "white", colors[10], "white"),
+    lightintensity = c(750, 50, 1000, 50),
+    lightaltitude = c(10, 80, 10, 80),
+    interactive = FALSE,
+    # HDR lighting used to light the scene
+    # environment_light = "assets/env/phalzer_forest_01_4k.hdr",
+    # # environment_light = "assets/env/small_rural_road_4k.hdr",
+    # # Adjust this value to brighten or darken lighting
+    # intensity_env = 1.5,
+    # # Rotate the light -- positive values move it counter-clockwise
+    # rotate_env = 130,
+    # This effectively sets the resolution of the final graphic,
+    # because you increase the number of pixels here.
+    # width = round(6000 * wr), height = round(6000 * hr),
+    width = 4000, height = 4000,
+    ground_material = rayrender::diffuse(color = colors[12])
+  )
+  end_time <- Sys.time()
+  cat(glue("Total time: {end_time - start_time}"), "\n")
+}
+```
+
+```{r}
+#| label: label-plot
+#| message: false
+#| warning: false
+#| echo: false
+#| eval: true
+
+library(magick)
+library(glue)
+library(colorspace)
+
+colors <- met.brewer("Hiroshige", 12)
+swatchplot(colors)
+text_color <- colors[5]
+
+## Read in Image ---------------
+img <- image_read("temp/render.png")
+image_info(img)
+
+s <- darken("#9a9397", .1)
+shadow <- "#9a9397"
+inset <- image_read("images/30x30_White.png")
+
+## Add Stuff to Image and Write Out ------------------------------------------------------
+
+img |>
+  image_crop(geometry = "3000x2000+0+0", gravity = "center") |>
+  image_annotate(text = "CA", degrees = 350, 
+                 gravity = "north",
+                 location = "+100+500", font = "Go Mono for Powerline",
+                 color = text_color, kerning = 20,
+                 size = 200, weight = 500) |> 
+  image_composite(image_scale(inset, geometry = "25%x"),
+                   gravity = "southwest",
+                   offset = "+1000+100") |>
+  image_write("temp/titled.png")
 
 ```
 
 ```{r}
 library(patchwork)
+my_img <- image_read("temp/titled.png") |> 
+  image_crop(geometry = "3000x2000+100+100", gravity = "center")
+my_img
+#image_info(my_img)  
+
 my_image <-  png::readPNG("figs/day09-hexagons_3d.png")
 gall <- g1 + grid::rasterGrob(my_image) 
 
 ggsave(filename = glue("figs/day09_hexagons_3d.png"), width = 11, height = 8.5, dpi = 300)
 
-```
+# alt
+my_image <-  png::readPNG("temp/titled.png")
+gall <- g1 + grid::rasterGrob(my_img)
+gall
+
+gall <- g1 + patchwork::inset_element(grid::rasterGrob(my_img), 0.7, 0.2, 1, 1, clip = FALSE) & theme(plot.background = element_rect(fill = "#252a32", colour = "#252a32"))
+gall
+
+git ```
 
