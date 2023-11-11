@@ -66,4 +66,4 @@ African ocean currents!
 
 30x30 Wildlife connectivity (in hexagons).
 
-![](figs/day09_hexagons_3d.png)
+![](figs/day09_hexagons_3d_circle_v1.png)
