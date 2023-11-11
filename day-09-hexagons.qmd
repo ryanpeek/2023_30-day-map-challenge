@@ -323,24 +323,43 @@ img |>
 ```
 
 ```{r}
+#| label: patchwork-plot
+#| message: false
+#| warning: false
+#| echo: false
+#| eval: false
+
 library(patchwork)
 my_img <- image_read("temp/titled.png") |> 
   image_crop(geometry = "3000x2000+100+100", gravity = "center")
 my_img
-#image_info(my_img)  
 
-my_image <-  png::readPNG("figs/day09-hexagons_3d.png")
-gall <- g1 + grid::rasterGrob(my_image) 
+image_info(my_img)  
 
-ggsave(filename = glue("figs/day09_hexagons_3d.png"), width = 11, height = 8.5, dpi = 300)
+#my_image <-  png::readPNG("figs/day09-hexagons_3d.png")
+#gall <- g1 + grid::rasterGrob(my_image) 
 
 # alt
 my_image <-  png::readPNG("temp/titled.png")
-gall <- g1 + grid::rasterGrob(my_img)
+library(cropcircles)
+img_circle <- circle_crop("temp/titled.png", "temp/titled_circle.png", border_size = 200, border_colour = "#252a32")
+circ_image <-  png::readPNG("temp/titled_circle.png")
+
+# standard
+gall <- g1 + grid::rasterGrob(circ_image) + 
+  theme(plot.background = element_rect(fill = "#252a32", 
+                                       colour = "#252a32"))
+gall
+ggsave(filename = glue("figs/day09_hexagons_3d_circle_v1.png"), width = 11, height = 8.5, dpi = 300)
+
+
+# inset
+ginset <- g1 + patchwork::inset_element(grid::rasterGrob(my_img), 0.7, 0.2, 1, 1, clip = FALSE) & theme(plot.background = element_rect(fill = "#252a32", colour = "#252a32"))
 gall
 
-gall <- g1 + patchwork::inset_element(grid::rasterGrob(my_img), 0.7, 0.2, 1, 1, clip = FALSE) & theme(plot.background = element_rect(fill = "#252a32", colour = "#252a32"))
-gall
+ggsave(filename = glue("figs/day09_hexagons_3d.png"), width = 11, height = 8.5, dpi = 300)
 
-git ```
+
+
+```
 

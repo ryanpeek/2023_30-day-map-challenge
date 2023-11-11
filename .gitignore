@@ -58,3 +58,4 @@ rsconnect/
 data_raw/*
 sndbox*
 code/sndbox*
+temp/*
