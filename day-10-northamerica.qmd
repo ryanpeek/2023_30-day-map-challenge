@@ -1,0 +1,161 @@
+---
+title: '2023 30-day Map Challenge • Day 10 • North America'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## North America: Longest Roads
+
+Mapping the roads of North America seemed an interesting thing to think about trying, but I was curious what the longest road/highway/interstate may actually be. So this was an attempt. I love the old maps that stack river lengths or tree heights vertically on a side and then show additional information on the opposite side, almost like a sideways histogram. 
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: true
+
+library(tidyverse)
+library(hrbrthemes)
+library(glue)
+library(ggtext)
+library(sf)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(patchwork)
+library(colorspace)
+sf::sf_use_s2(FALSE)
+library(showtext)
+#extrafont::fonts() # get fonts avail
+font_add_google("Peralta")
+showtext_auto()
+
+# Get Data ----------------------------------------------------------------
+
+# get states
+library(tidycensus)
+us <- tigris::states() |> 
+  filter(!STUSPS %in% 
+           c("HI","AS","PR","MP","VI", "GU", "AK"))
+#us <- shift_geometry(us,preserve_area = TRUE, position = "below")
+plot(us$geometry)
+
+# get state cnty boundaries
+ca <- tigris::states() |> filter(STUSPS=="CA")
+cnty <- tigris::counties(state="CA")
+
+# get roads in state! (# this takes a minute)
+# and it's a big file ~ 260MB
+if(!file.exists("data_raw/ca_roads.rds")){
+  ca_rds <- tigris::roads("CA", cnty$COUNTYFP)
+  saveRDS(ca_rds, file = "data_raw/ca_roads.rds")
+} else({
+  ca_rds <- read_rds("data_raw/ca_roads.rds")
+})
+
+# add length
+ca_rds <- ca_rds |> 
+  mutate(rd_length_m = st_length(geometry)) |> 
+  mutate(rd_length_mi = drop_units(set_units(rd_length_m, miles)))
+
+# ALL US primary roads
+# https://catalog.data.gov/dataset/tiger-line-shapefile-2019-nation-u-s-primary-roads-national-shapefile
+library(units)
+us_rds <- st_read("~/Downloads/tl_2019_us_primaryroads/tl_2019_us_primaryroads.shp") |> 
+  mutate(rd_length_m = st_length(geometry)) |> 
+  mutate(rd_length_mi = drop_units(set_units(rd_length_m, miles))) |> 
+  st_transform(st_crs(us))
+
+us_rds <- us_rds[us,]
+
+# PLOT?
+gg_rd1 <- ggplot() + 
+  geom_sf(data=us, fill=NA, color="gray50") +
+  geom_sf(data=us_rds, aes(color=rd_length_mi), lwd=0.5, show.legend = FALSE) +
+  scale_color_viridis_c("Length (mi)", option="F", trans = "log1p", breaks = c(10, 25, 50,100,150))+
+  coord_sf(label_graticule = "", datum = NA) +
+  hrbrthemes::theme_ft_rc(
+    base_family = "Peralta",
+    caption_family = "Roboto Slab", 
+    plot_title_size = 42, subtitle_size = 32, caption_size = 18) +
+  labs(title="Longest Road Segments", 
+       subtitle = "TIGER 2019 U.S. Primary Roads",
+       caption = "R. Peek • Data: Tiger 2019 Primary Roads \n <https://github.com/ryanpeek/2023_30-day-map-challenge/>") +
+  theme(plot.subtitle = element_text(color="gray80"),
+        plot.caption = element_text(color="gray80"),
+        legend.text = element_text(size = 16, color="gray80"))
+  
+gg_rd1
+
+ggsave(plot=gg_rd1, filename="figs/day10-namerica-roads.png", width = 7, height = 10, units = "in", dpi = 300)
+
+# ca map
+gg_rd2 <- ggplot() + 
+  geom_sf(data=cnty, fill=NA, color="gray50") +
+  geom_sf(data=ca_rds |> filter(rd_length_mi > 5), aes(color=rd_length_mi, linewidth=rd_length_mi)) +
+  scale_linewidth_continuous(range=c(0.2,2))+
+  scale_color_viridis_c("Length (mi)", 
+                        option="F", 
+                        trans = "log1p", 
+                        breaks = c(5, 10, 25, 50,100,150))+
+  coord_sf(label_graticule = "", datum = NA) +
+  hrbrthemes::theme_ft_rc(
+    base_family = "Peralta",
+    caption_family = "Roboto", 
+    plot_title_size = 42, subtitle_size = 32, caption_size = 18) +
+  labs(subtitle="California")+ 
+  #     subtitle = "TIGER Road Data",
+  #     caption = "R. Peek • Data: {tigris} \n <https://github.com/ryanpeek/2023_30-day-map-challenge/>") +
+  guides(linewidth="none")+
+  theme(plot.subtitle = element_text(color="gray80"),
+        plot.caption = element_text(color="gray80"),
+        legend.text = element_text(size = 16, color="gray80"))
+gg_rd2  
+
+# this is big and takes a while to render
+ggsave(plot=gg_rd2, filename="figs/day10-namerica-ca-roads.png", width = 7, height = 10, units = "in", dpi = 300)
+  
+```
+
+## Arrange Plots
+
+```{r}
+#| label: combine-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(patchwork)
+# standard
+gall <- gg_rd2 +plot_spacer()+ gg_rd1 +
+  patchwork::plot_layout(widths = c(1.4,-0.3, 2),
+              guides = "collect") + 
+  theme(plot.background = 
+          element_rect(fill = "#252a32", 
+                       colour = "#252a32"))
+
+gall
+
+ggsave(gall, filename = glue("figs/day10_northamerica_combined.png"), width = 11, height = 8.5, dpi = 300)
+
+
+```
+
