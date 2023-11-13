@@ -67,3 +67,9 @@ African ocean currents!
 30x30 Wildlife connectivity (in hexagons).
 
 ![](figs/day09_hexagons_3d_circle_v1.png)
+
+### Day-10
+
+Longest roads...of North America. A quick visual assessment of the longest road segments from the TIGRIS database, primary roads in the US, and all roads > 5 miles long in CA.
+
+![](figs/day10-northamerica-combined.png)
