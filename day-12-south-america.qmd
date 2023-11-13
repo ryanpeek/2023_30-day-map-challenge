@@ -1,0 +1,134 @@
+---
+title: '2023 30-day Map Challenge • Day 12 • South America'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## South America
+
+Scrape [Wikipedia](https://en.wikipedia.org/wiki/List_of_South_American_stadiums_by_capacity) for data on South American soccer stadiums.
+
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: true
+
+# To scrape data
+library(rvest)
+library(httr)
+library(polite)
+library(purrr)
+library(tidyverse)
+library(janitor)
+library(glue)
+
+# web url
+url <- "https://en.wikipedia.org/wiki/List_of_South_American_stadiums_by_capacity"
+url_bow <- polite::bow(url)
+
+# scrape data and grab all the tables
+dat_html <-
+  polite::scrape(url_bow)  |>
+  rvest::html_nodes("table.wikitable")  |> 
+  rvest::html_table(fill = TRUE) 
+
+# add names to list for easier use
+names(dat_html)
+names(dat_html) <- c("South America >30k", "Argentina <30k","Argentina <30k indoor", "Bolivia <30k","Bolivia <30k indoor", "Brazil <30k", "Brazil <30k indoor", "Chile <30k", "Chile <30k indoor", "Columbia <30k", "Columbia <30k indoor", "Ecuador <30k", "Ecuador <30k indoor", "Guyana <30k", "Paraguay <30k", "Peru <30k", "Peru <30k indoor","Uruguay <30k", "Venezuela <30k", "Venezuela <30k indoor")
+# check
+names(dat_html)
+
+# filter out indoor data
+dat_html_filt <- dat_html[!grepl("indoor", names(dat_html))]
+names(dat_html_filt)
+
+# now can we condense into one final list?
+dat_df <- dat_html_filt |> 
+  list_rbind(names_to = "table_name") |> 
+  clean_names()
+
+# now some cleaning to coalesce
+dat_cleaned <- dat_df |> 
+  mutate(
+    year_opened = case_when(
+      stadium == "Estadio GEBA" ~ "1902",
+      TRUE ~ year_opened),
+    year_opened = as.integer(year_opened),
+    opened = case_when(
+      stadium == "Estadio Alberto Grisales" ~ 
+        "1978",
+      TRUE ~ opened),
+    opened = as.integer(opened)) |>
+  # now combine
+  mutate(
+    year = coalesce(opening, year_opened, opened), .after = home_team_s) |> 
+  select(-c(opening, year_opened, opened)) |> 
+  mutate(home_team = coalesce(home_team_s, home_team, team, club, tenants)) |> 
+  mutate(city = coalesce(city, state, location)) |> 
+    select(-c(home_team_s, team, tenants, club, image, province, state, location)) |> 
+  # make capacity continuous
+  mutate(capacity = as.integer(gsub(",", "", str_split_i(capacity, "\\[", 1))))
+
+```
+
+
+```{r}
+#| label: combine-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(hrbrthemes)
+library(ggtext)
+library(sf)
+library(patchwork)
+library(colorspace)
+sf::sf_use_s2(FALSE)
+library(showtext)
+font_add_google("Overpass")
+#showtext_auto()
+
+library(systemfonts)
+#systemfonts::font_info("Overpass")
+register_variant(
+  name = "Overpass SemiBold",
+  family = "Overpass",
+  weight = "semibold")
+
+```
+
+
+## Arrange Plots
+
+```{r}
+#| label: combine-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+
+
+```
+
