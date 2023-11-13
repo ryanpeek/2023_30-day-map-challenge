@@ -1,0 +1,194 @@
+---
+title: '2023 30-day Map Challenge • Day 11 • Retro'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Retro
+
+Maps of Tolkien's [Middle Earth](https://github.com/jvangeld/ME-GIS). Inspired by this [amazing post by Andrew Heiss](https://www.andrewheiss.com/blog/2023/04/26/middle-earth-mapping-sf-r-gis/)
+
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: true
+
+library(tidyverse)
+library(hrbrthemes)
+library(glue)
+library(ggtext)
+library(sf)
+library(patchwork)
+library(colorspace)
+sf::sf_use_s2(FALSE)
+library(showtext)
+font_add_google("Overpass")
+#showtext_auto()
+
+library(systemfonts)
+systemfonts::font_info("Overpass")
+register_variant(
+  name = "Overpass SemiBold",
+  family = "Overpass",
+  weight = "semibold")
+
+# Get ME Data ----------------------------------------------------------------
+me_coast <- read_sf("~/Downloads/ME-GIS-master/Coastline2.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_cont <- read_sf("~/Downloads/ME-GIS-master/Contours_18.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_rivers <- read_sf("~/Downloads/ME-GIS-master/Rivers.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_roads <- read_sf("~/Downloads/ME-GIS-master/Roads.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_lakes <- read_sf("~/Downloads/ME-GIS-master/Lakes.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_regions <- read_sf("~/Downloads/ME-GIS-master/Regions_Anno.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_forests <- read_sf("~/Downloads/ME-GIS-master/Forests.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_hills <- read_sf("~/Downloads/ME-GIS-master/Hills.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_mountains <- read_sf("~/Downloads/ME-GIS-master/Mountains_Anno.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_placenames <- read_sf("~/Downloads/ME-GIS-master/Combined_Placenames.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_ruin <- read_sf("~/Downloads/ME-GIS-master/Ruins.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+  
+me_towers <- read_sf("~/Downloads/ME-GIS-master/Towers_and_Keeps.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_wetlands <- read_sf("~/Downloads/ME-GIS-master/Wetlands02.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+me_vulcan <- read_sf("~/Downloads/ME-GIS-master/Vulcanism.shp") |> 
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8")))
+
+```
+
+```{r}
+# wrangle some data
+me_rivers <- me_rivers |> 
+  mutate(TYPE = case_when(
+    grepl("River", TYPE) ~ "River",
+    TRUE ~ TYPE
+  ))
+#table(me_rivers$TYPE)
+
+```
+
+
+```{r}
+# helper functions
+clr_green <- "#035711"
+clr_blue <- "#27408B"
+clr_yellow <- "#fffce3"
+
+# Format numeric coordinates with degree symbols and cardinal directions
+format_coords <- function(coords) {
+  ns <- ifelse(coords[[1]][2] > 0, "N", "S")
+  ew <- ifelse(coords[[1]][1] > 0, "E", "W")
+  
+  glue("{latitude}°{ns} {longitude}°{ew}",
+       latitude = sprintf("%.6f", coords[[1]][2]),
+       longitude = sprintf("%.6f", coords[[1]][1]))
+}
+
+miles_to_meters <- function(x) {
+  x * 1609.344
+}
+
+meters_to_miles <- function(x) {
+  x / 1609.344
+}
+
+
+```
+
+```{r}
+# try a map
+me_places <- me_placenames |>  
+  filter(NAME %in% c("Hobbiton", "Rivendell", "Edoras", "Minas Tirith"))
+
+ggplot() +
+  geom_sf(data = me_cont, linewidth = 0.15, 
+          color = alpha("grey20", 0.5)) +
+  geom_sf(data = me_coast, linewidth = 0.9, color = alpha("#27408B", 0.6)) +
+  geom_sf(data = me_rivers |> filter(TYPE=="River"),
+          linewidth=0.4, color="dodgerblue4", alpha=0.8) +
+  geom_sf(data = me_rivers |> filter(TYPE=="Stream"),
+          linewidth=0.1, color=alpha("dodgerblue4", 0.8)) +
+  geom_sf(data = me_lakes, linewidth = 0.2, color = "steelblue", fill = alpha("steelblue", 0.8)) +
+  geom_sf(data = me_forests, linewidth = 0, fill = "darkgreen", alpha = 0.8) +
+  ggrepel::geom_text_repel(data = me_forests |> filter(!is.na(NAME)) |> 
+                 distinct(NAME, .keep_all = TRUE),
+               aes(label = NAME, geometry=geometry), 
+               stat = "sf_coordinates", 
+               force_pull = 1.1, force = 1,
+               min.segment.length = .8, size=5,
+               color="#1d4608",
+               bg.color = "gray90", bg.r = 0.1,
+               segment.size  = 0.5,
+               segment.color = "grey50",
+               family = "Palatino", fontface = "bold.italic") +
+  geom_sf(data = me_wetlands, color = "brown4", fill = alpha("brown4", 0.8)) +
+  labs(title = "Forests of Middle Earth",
+       subtitle = "#30DayMapChallenge • Day-11:Retro",
+       caption = "Ryan Peek \n <https://github.com/ryanpeek/2023_30-day-map-challenge/>",
+  ) +
+  ggthemes::theme_map() +
+  theme(plot.background = element_rect(color = "white", fill = "#fffce3"),
+        plot.subtitle = element_text(family = "Aniron"),
+        plot.caption = element_text(family = "Roboto Condensed", size=14),
+        plot.title = element_text(family = "Aniron", size = rel(2), 
+                                  hjust = 0.02))
+
+ggsave(filename = glue("figs/day11-retro.png"), width = 10, height = 8, dpi = 300)
+
+```
+
+
+## Arrange Plots
+
+```{r}
+#| label: combine-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+
+
+```
+

@@ -73,3 +73,9 @@ African ocean currents!
 Longest roads...of North America. A quick visual assessment of the longest road segments from the TIGRIS database, primary roads in the US, and all roads > 5 miles long in CA.
 
 ![](figs/day10-northamerica-combined.png)
+
+### Day-11
+
+Retro! Maps of Middle Earth. Heavily inspired and revising code from [this post by Andrew Heiss](https://www.andrewheiss.com/blog/2023/04/26/middle-earth-mapping-sf-r-gis/)
+
+![](figs/day11-retro.png)
