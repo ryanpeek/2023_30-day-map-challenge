@@ -1,0 +1,200 @@
+---
+title: '2023 30-day Map Challenge • Day 14 • Europe'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Europe: Climate Data
+
+Trying out this:
+
+https://www.paulamoraga.com/book-spatial/r-packages-to-download-open-spatial-data.html
+
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: true
+
+library(geodata)
+library(tidyverse)
+library(hrbrthemes)
+library(glue)
+library(ggtext)
+library(sf)
+library(rnaturalearth)
+library(tigris)
+options(tigris_use_cache = TRUE)
+
+library(patchwork)
+library(colorspace)
+sf::sf_use_s2(FALSE)
+library(showtext)
+font_add_google("Irish Grover")
+font_add_google("Roboto Slab")
+showtext_auto()
+
+# Get Data ----------------------------------------------------------------
+
+# get IRL
+irl <- ne_states(country = c("Ireland"), returnclass = "sf")
+nir <- ne_states(country = "United Kingdom", returnclass = "sf") |> 
+  filter(region == "Northern Ireland")
+ireland <- bind_rows(irl, nir)
+plot(ireland$geometry, border="gray50")
+plot(st_union(ireland$geometry), border="forestgreen", lwd=2, add=TRUE)
+
+# get worldclim data for precip and elev
+d_wclim <- worldclim_country(country = "Ireland", 
+                       var = "prec",
+                       path = tempdir())
+d_elev <- elevation_30s(country = "Ireland",
+                       path = tempdir())
+
+# plot
+terra::plot(mean(d_wclim), col=viridis::mako(256), plg = list(title = "Precipitation"))
+plot(ireland$geometry, add=TRUE, border=alpha("white", 0.3))
+
+terra::plot(d_elev, col=viridis::viridis(256), plg = list(title = "Elev"))
+plot(ireland$geometry, add=TRUE, border=alpha("white", 0.3))
+
+# raster data of elev (takes a while)
+#library(elevatr)
+#d_elev2 <- get_elev_raster(locations = ireland, z = 10, 
+#                     clip = "locations")
+#terra::plot(rast(d_elev2), col=viridis::mako(256), plg = list(title = "Elevation (m)"))
+#plot(ireland$geometry, add=TRUE, border=alpha("white", 0.3))
+
+```
+
+## Get Degree of Regulation from Ireland vs. Sweden
+
+From: HydroSHEDS and Global Reservoir and Dams (GRanD) database v1.1.
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: true
+
+# GET RIVERS and IDS
+rivs_eu <- st_read("/Users/rapeek/Documents/spatial_data/ATLAS/HydroRIVERS_v10_eu.gdb/HydroRIVERS_v10_eu.gdb", "HydroRIVERS_v10_eu")
+# crop to Ireland
+rivs_ire <- rivs_eu[ireland,]
+plot(rivs_ire$Shape, lwd = rivs_ire$ORD_STR, col=alpha("blue4", 0.5))
+plot(ireland$geometry, border=alpha("orange", 0.5), add=TRUE)
+rm(rivs_eu)
+
+# Read in based on SQL and get only first few rows
+rivs_atlas_db <- "/Users/rapeek/Documents/spatial_data/ATLAS/RiverATLAS_Data_v10.gdb/RiverATLAS_v10.gdb"
+st_layers("/Users/rapeek/Documents/spatial_data/ATLAS/RiverATLAS_Data_v10.gdb/RiverATLAS_v10.gdb")
+# read only first few rows
+rivs_atlas <- st_read(dsn=rivs_atlas_db, 
+                      query="select * from \"RiverATLAS_v10\" limit 5")
+
+# read matching options
+rivs_atlas <- st_read(dsn=rivs_atlas_db, query=glue("select HYRIV_ID,dor_pc_pva from \"RiverATLAS_v10\" where HYRIV_ID in ({glue_collapse(rivs_ire$HYRIV_ID[1:100], sep=',')}) limit 50"))
+
+# k try all!
+rivs_atlas <- st_read(dsn=rivs_atlas_db, query=glue("select HYRIV_ID,dor_pc_pva from \"RiverATLAS_v10\" where HYRIV_ID in ({glue_collapse(rivs_ire$HYRIV_ID[1:4000], sep=',')}) or HYRIV_ID in ({glue_collapse(rivs_ire$HYRIV_ID[4001:8349], sep=',')})"))
+# this takes forever!! save out?
+write_rds(rivs_atlas, file ="data_out/rivs_atlas_irl.rds")
+
+# join back to sf data
+identical(rivs_atlas$HYRIV_ID, rivs_ire$HYRIV_ID)
+rivs_atlas <- st_drop_geometry(rivs_atlas)
+
+rivers_ire <- left_join(rivs_ire, rivs_atlas)
+
+# basic plot
+plot(st_union(ireland), border=alpha("gray40", 0.5), col=alpha("forestgreen", 0.2), lwd=2)
+plot(rivers_ire$Shape, lwd = rivers_ire$ORD_STR*.3, col=alpha("blue4", 0.4), add=TRUE)
+plot(rivers_ire$Shape[rivers_ire$dor_pc_pva>0], col="orange", lwd=3, add=TRUE)
+
+# ggplot
+library(ggnewscale)
+ireland_bord <- st_union(ireland)
+ggplot() + 
+  geom_sf(data=ireland_bord, color=alpha("seagreen", 0.5), fill=alpha("darkgreen", 0.2), lwd=0.7) +
+  # try mapping to size
+  geom_sf(data=rivers_ire, aes(color=as.factor(ORD_STRA), size=as.factor(ORD_STRA)), show.legend = FALSE)+
+  scale_color_manual(name = "",
+    values = rev(c('#08306b', '#08519c', '#2171b5', '#4292c6', '#6baed6', alpha('#6baed6',0.7), alpha('#6baed6',0.4)))) +
+  scale_size_manual(values=c("1" = 0.1, "2" = 0.2, "3" = .45, "4" = .7, "5" = 1.2, "6"=2, "7"=3.1)) +
+  new_scale_colour() +
+  geom_sf(data=rivers_ire |> filter(dor_pc_pva>0), aes(color=dor_pc_pva), lwd=2, alpha=0.9) +
+  scale_color_viridis_c("DOR", option="C") +
+  ggthemes::theme_map() +
+  labs(title="Degree of Regulation in Irish Rivers",
+       subtitle = "#30DayMapChallenge • Day-14 • Europe",
+       caption = "R. Peek • Data: HydroSheds RiverATLAS") +
+  theme(plot.title = element_text(family ="Irish Grover", size = 80, hjust=0.5),
+        plot.subtitle = element_text(family="Irish Grover", size=50, hjust=0.5),
+        plot.caption = element_text(family="Roboto Slab", size=38),
+        legend.title = element_text(family = "Roboto Condensed", face="bold", size=34),
+        legend.text = element_text(family = "Roboto Condensed", face="bold", size=34),
+        legend.position = c(0.94, 0.79))
+
+# save
+ggsave(filename = "figs/day14-europe-irlrivs.png", width = 8, height = 10, dpi=300, bg="white")
+
+```
+
+
+
+## Tidy Data
+
+```{r}
+#| label: tidy-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+## PLOTTTTTTT
+g1 <- ggplot() +
+  geom_sf(data= ca, fill=NA, color="gray50", lwd=0.7) +
+  geom_sf(data = ace_dat, aes(fill = Connectivity_rank), color=alpha("white",0)) +
+  scale_fill_viridis_c("Rank", option="A")+
+  hrbrthemes::theme_ft_rc(base_family = "Hepta Slab", plot_title_size = 22,
+                          subtitle_size = 16, caption_size = 12)+
+  labs(x = NULL, y = NULL) +
+  coord_sf(label_axes = "")+
+  theme(plot.subtitle = element_text(color="gray80"),
+        plot.caption = element_text(color="gray80"),
+        legend.text = element_text(color="gray80"),
+        plot.background = element_rect("#252a32"),
+        legend.position = c(0.1, 0.2),
+        panel.grid.major = element_blank())+
+  labs(
+    title = "Terrestrial Connectivity Ranking",
+    subtitle = "#30DayMapChallenge • Day-09 • Hexagons",
+    caption="R. Peek • Data: 30x30 <https://www.californianature.ca.gov/> \n <https://github.com/ryanpeek/2023_30-day-map-challenge/>")
+
+g1
+
+
+```
+
+
+

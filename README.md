@@ -85,3 +85,15 @@ Retro! Maps of Middle Earth. Heavily inspired and revising code from [this post 
 Some webscraping from wikipedia and tidygeocoder to get lat/longs, and a map of South American soccer stadiums!
 
 ![](figs/day12-south-america.png)
+
+### Day-13
+
+TBD
+
+![]()
+
+### Day-14
+
+Degree of Regulation in Ireland (including Northern Ireland) based on HydroSHED RiverATLAS data. Few rivers have much of any degree of regulation save a few. 
+
+![](figs/day14-europe-irlrivs.png)
