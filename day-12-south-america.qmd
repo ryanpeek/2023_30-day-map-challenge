@@ -87,13 +87,61 @@ dat_cleaned <- dat_df |>
   mutate(city = coalesce(city, state, location)) |> 
     select(-c(home_team_s, team, tenants, club, image, province, state, location)) |> 
   # make capacity continuous
-  mutate(capacity = as.integer(gsub(",", "", str_split_i(capacity, "\\[", 1))))
+  mutate(capacity = as.integer(gsub(",", "", str_split_i(capacity, "\\[", 1)))) |> 
+  # add country where it doesn't exists
+  mutate(country = case_when(
+    is.na(country) ~ str_split_i(dat_cleaned$table_name, " <30k", 1),
+    TRUE ~ country
+  ))
 
 ```
 
 
 ```{r}
-#| label: combine-data
+#| label: geocode
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+# this takes a minute
+library(tidygeocoder)
+dat_geo <- dat_cleaned |> 
+  tidygeocoder::geocode(city = city, country = country, unique_only = TRUE,
+                        method = "osm") 
+
+# save out so don't have to do again
+# write_rds(dat_geo, file = "data_raw/s_america_stadiums_geocoded.rds")
+
+```
+
+```{r}
+#| label: geocode
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(sf)
+library(rnaturalearth)
+
+# get the data
+dat_geo <- read_rds("data_raw/s_america_stadiums_geocoded.rds")
+# join back and make sf
+dat_full <- left_join(dat_cleaned, dat_geo) |> 
+  st_as_sf(coords=c("long","lat"), crs=4326, remove=FALSE)
+
+# get south america
+sa_border <- ne_countries(continent = "South America", returnclass = "sf")
+plot(sa_border$geometry)
+
+```
+
+
+## Plots
+
+```{r}
+#| label: plot
 #| message: false
 #| warning: false
 #| echo: true
@@ -101,7 +149,7 @@ dat_cleaned <- dat_df |>
 
 library(hrbrthemes)
 library(ggtext)
-library(sf)
+library(ggthemes)
 library(patchwork)
 library(colorspace)
 sf::sf_use_s2(FALSE)
@@ -116,19 +164,46 @@ register_variant(
   family = "Overpass",
   weight = "semibold")
 
-```
+# plot
+ggplot() + geom_sf(data=sa_border, fill=NA, color="gray50")+
+  hrbrthemes::theme_ft_rc(
+    base_family = "Overpass SemiBold",
+    caption_family = "Roboto Slab", 
+    plot_title_size = 20, caption_size = 10) +
+  # plot the stadiums under 40,000
+  geom_jitter(data=dat_full |> filter(capacity<35000),
+              aes(x=long, y=lat, fill=capacity), size=1.5,
+              color=alpha("gray90",0.8), pch=21) +
+  geom_sf(data=dat_full |> filter(capacity>50000),
+          aes(fill=capacity), size=5, 
+          color=alpha("gray90",0.8), pch=21) +
+  ggrepel::geom_text_repel(data =dat_full |> filter(capacity>60000),
+               aes(label = stadium, geometry=geometry), 
+               stat = "sf_coordinates", 
+               force_pull = 5, force = 1.5,
+               min.segment.length = 0.1, size=5,
+               color="black",
+               bg.color = "white",
+               segment.size  = 0.5, segment.curvature=-.2,
+               segment.color = "grey80",
+               family = "Overpass", fontface = "bold") +
+  
+  scale_fill_continuous_tableau(palette = "Orange-Gold", name="Capacity", ) +
+  annotate(geom="text", label="*Labeled Stadiums with \nCapacity over 60,000", x=-44, y=8)+
+  coord_sf(label_graticule = "", datum = NA) +
+  guides(size="none")+
+  labs(title="Futból (⚽️) Stadiums of South America", 
+       subtitle = "#30DayMapChallenge • Day-12 • South America",
+       caption = "R. Peek • Data: Wikipedia South American Stadiums\n <https://github.com/ryanpeek/2023_30-day-map-challenge/>",
+       y="", x="") +
+  theme(
+    plot.title = element_text(hjust=0.5),
+    plot.subtitle = element_text(color="gray90", hjust=0.5),
+    plot.caption = element_text(color="gray80"),
+    legend.title = element_text(color="gray80"),
+    legend.text = element_text(color="gray80"),
+    plot.margin = margin(0.4, 4, 1, 4, "cm"))
 
-
-## Arrange Plots
-
-```{r}
-#| label: combine-data
-#| message: false
-#| warning: false
-#| echo: true
-#| eval: false
-
-
-
+ggsave("figs/day12-south-america.png", width = 9, height = 10, dpi=300)
 ```
 

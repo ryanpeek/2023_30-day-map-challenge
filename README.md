@@ -79,3 +79,9 @@ Longest roads...of North America. A quick visual assessment of the longest road 
 Retro! Maps of Middle Earth. Heavily inspired and revising code from [this post by Andrew Heiss](https://www.andrewheiss.com/blog/2023/04/26/middle-earth-mapping-sf-r-gis/)
 
 ![](figs/day11-retro.png)
+
+### Day-12
+
+Some webscraping from wikipedia and tidygeocoder to get lat/longs, and a map of South American soccer stadiums!
+
+![](figs/day12-south-america.png)
