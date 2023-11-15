@@ -96,4 +96,4 @@ TBD
 
 Degree of Regulation in Ireland (including Northern Ireland) based on HydroSHED RiverATLAS data. Few rivers have much of any degree of regulation save a few. 
 
-![](figs/day14-europe-irlrivs.png)
+![](figs/day14-europe-rivs-combined.png)
