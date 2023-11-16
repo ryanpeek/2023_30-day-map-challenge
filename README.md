@@ -90,7 +90,7 @@ Some webscraping from wikipedia and tidygeocoder to get lat/longs, and a map of 
 
 Chloropleth of logging in CA summarized by county from 1997-2022
 
-![](day13-chloropleth-logging-titled.png)
+![](figs/day13-chloropleth-logging-titled.png)
 
 ### Day-14
 
