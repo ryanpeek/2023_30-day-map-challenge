@@ -88,9 +88,9 @@ Some webscraping from wikipedia and tidygeocoder to get lat/longs, and a map of 
 
 ### Day-13
 
-Chloropleth
+Chloropleth of logging in CA summarized by county from 1997-2022
 
-![]()
+![](day13-chloropleth-logging-titled.png)
 
 ### Day-14
 

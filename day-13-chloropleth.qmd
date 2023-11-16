@@ -105,7 +105,7 @@ plot_gg(g,
 render_camera(phi = 65, fov=50, theta = -1, zoom=0.4)
 
 # set up the save out 
-outfile <- "figs/day13-chloropleth_logging-3d.png"
+outfile <- "figs/day13-chloropleth-logging.png"
 
 # make sure to create the file to write to...
 {
@@ -142,7 +142,7 @@ img |>
                  location = "-10+50", font = "Roboto Slab",
                  color = "black", kerning = 2,strokecolor = "black",
                  size = 20, weight = 200) |>
-  image_write("figs/day13-chloropleth_logging-3d-titled.png")
+  image_write("figs/day13-chloropleth-logging-titled.png")
 
 
 ```
