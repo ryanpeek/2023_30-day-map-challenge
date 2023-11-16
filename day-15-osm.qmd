@@ -1,0 +1,122 @@
+---
+title: '2023 30-day Map Challenge • Day 15 • OSM'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Open Street Map
+
+Rae Lakes Loop
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: true
+
+library(tidyverse)
+library(hrbrthemes)
+library(glue)
+library(sf)
+library(osmdata)
+library(colorspace)
+library(showtext)
+library(scales)
+library(ggnewscale)
+#font_add_google("Roboto Slab")
+#showtext_auto()
+
+# get osm data
+# available_tags() # see here for more: https://wiki.openstreetmap.org/wiki/Map_Features
+#available_tags("water") |> View()# river 
+#available_tags("natural") # hot_spring peak cave_entrance cliff hill
+#available_tags("highway")
+#available_tags("route") # hiking bicycle foot 
+
+# get bb and stuff for that area
+osm_hike <- getbb("Kings Canyon National Park") |> 
+  opq() |> 
+  add_osm_feature(key = "route", 
+                  value = c("hiking", "foot")) |> 
+  osmdata_sf()
+
+osm_water <- getbb("Kings Canyon National Park") |> 
+  opq() |> 
+  add_osm_feature(key = "water", 
+                  value = c("lake", "river", "stream_pool", "pond")) |> 
+  osmdata_sf()
+
+# pull out pieces I want for Rae Lakes loop (counterclockwise)
+osm_ids_rae <- c("989160576", "989160575", "39456082", "1015935300","435173484",
+                 "373165162","45706433","1014652076","126065965",
+                 "948459281","763219969","125838172","125838173", "126056685",
+                 "840673798",  "126056683")
+
+# get just the loop
+rae_loop <- osm_hike$osm_lines |> filter(osm_id %in% osm_ids_rae)
+
+library(elevatr)
+# get profile of trail?
+rae_points <- st_cast(rae_loop, "POINT")
+rae_profile <- elevatr::get_aws_points(rae_points, z=6, units="feet")
+rae_profile_sf <- rae_profile[[1]]
+row_id <- seq(1:nrow(rae_profile_sf))
+rae_profile_sf$row_id <- row_id
+# get basemap
+# library(basemaps)
+# basemaps::flush_cache()
+# # myext <- draw_ext()
+# # get_maptypes()
+# set_defaults(map_service = "osm", map_type = "terrain")
+# basemap_magick(ext = rae_loop, force = TRUE)
+# basemap_mapview(ext = rae_loop)
+# make all mercator for now
+# myext <- st_transform(myext, 3857)
+
+# crop water data to the ext
+rae_water <- st_crop(osm_water$osm_polygons, rae_loop)
+
+library(tmaptools)
+library(stars)
+bg_map <- read_osm(rae_loop, type="esri-shaded")
+bg_map <- st_transform(bg_map, 4326)
+
+# plot
+ggplot() + 
+  geom_stars(data=bg_map |> st_rgb()) +    
+  geom_sf(data=rae_profile_sf, aes(color=elevation), show.legend = TRUE, linewidth=1.4)+
+  scale_color_viridis_c("Elev (ft)", option = "B")+
+  geom_sf(data=rae_water, fill=alpha("steelblue",0.8), show.legend =FALSE)+
+  guides(fill="none")+
+  coord_sf(label_graticule = "") +
+  hrbrthemes::theme_ipsum_inter(grid = FALSE) +
+  labs(title="Kings Canyon National Park: Rae Lakes Loop", 
+       y="", x="",
+       subtitle = "#30DayMapChallenge • Day-15 • OSM",
+       caption="R. Peek • <https://github.com/ryanpeek/2023_30-day-map-challenge/> \n  Data from OSM") +
+  theme(legend.position = c(0.1, 0.79))
+
+# save
+ggsave(filename = "figs/day15-osm-seki.png", width = 10, height = 8, dpi=300, bg="white")
+                   
+
+
+```

@@ -97,3 +97,10 @@ Chloropleth of logging in CA summarized by county from 1997-2022
 Degree of Regulation in Ireland (including Northern Ireland) based on HydroSHED RiverATLAS data. Few rivers have much of any degree of regulation save a few. 
 
 ![](figs/day14-europe-rivs-combined.png)
+
+### Day-15
+
+Open Street Map. I've made it halfway! This is the Rae Lakes loop in SEKI.
+
+![](figs/day15-osm-seki.png)
+
