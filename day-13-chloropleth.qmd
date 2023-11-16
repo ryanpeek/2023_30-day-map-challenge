@@ -1,0 +1,148 @@
+---
+title: '2023 30-day Map Challenge • Day 13 • Chloropleth'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Chloropleths!
+
+Look at density of names of things (from tidycensus or something else?)
+
+[CalFire Forest Harvest Plans](https://forest-practice-calfire-forestry.hub.arcgis.com/datasets/CALFIRE-Forestry::cal-fire-timber-harvesting-plans-historical-ta83/about)
+
+See here for inspiration: 
+https://github.com/ursulams/thirtydaysofmaps/tree/main/2023/choropleth
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: true
+
+library(tidyverse)
+library(hrbrthemes)
+library(glue)
+library(ggtext)
+library(sf)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(colorspace)
+library(showtext)
+library(scales)
+#font_add_google("Roboto Slab")
+#showtext_auto()
+library(rayshader)
+
+# Data of Logging in Counties in CA
+# data from here: 
+log_dat <- st_read("data_raw/CAL_FIRE_Timber_Harvesting_Plans_All_TA83/CAL_FIRE_Timber_Harvesting_Plans_Historical_TA83.shp")
+
+# cnty data
+ca_cnty <- counties(state="CA") |> st_transform(st_crs(log_dat))
+
+# aggregate and summarize by county?
+log_cnty <- st_join(ca_cnty, log_dat)
+
+log_cnty_sum <- log_cnty |> group_by(NAME) |> 
+  summarize(total_acres = sum(GIS_ACRES))
+
+# 1997-2022 for years when THP completed
+#table(log_cnty$THP_YEAR)
+#plot(log_cnty_sum["total_acres"])
+
+# logging
+g <- ggplot() +
+  geom_sf(data = log_cnty_sum, aes(fill = total_acres), linewidth = 0.1) +
+  scale_fill_binned_sequential(name="", palette="Sunset-Dark", na.value = "white", labels = comma) +
+  ggthemes::theme_map(base_family = "Phosphate") +
+  guides(fill = guide_legend(label.position = "left")) +
+  theme(plot.background = element_rect(fill = "white", color = "white"),
+        plot.title = element_text(size = 30, hjust = 0.5, vjust = 2),
+        plot.subtitle = element_text(size = 18),
+        plot.margin = margin(2, 2, 2, 2, "cm"),
+        legend.title = element_text(family = "Roboto Slab"),
+        legend.position = c(0.65, 0.6),
+        plot.caption = element_text(family = "Roboto Slab"),
+        legend.text = element_text(size = 15, margin=margin(0.4,0.4,0.4,0.4, "cm"), family = "Roboto Slab", face = "bold"))
+  #labs(title = "Acres logged in CA by county (1997-2022)",
+  #     subtitle = "#30DayMapChallenge • Day-13 • Chloropleth",
+  #     caption = "Data: CalFire Forest Harvest Plans\nHistorical_TA83")
+g
+
+# 3D plot
+plot_gg(g, 
+        offset_edges = TRUE,
+        shadow_darkness = 0.3,
+        width = 15, 
+        height = 10, 
+        scale = 100,
+        theta = 340, phi = 40, 
+        shadowdepth = -.05,
+        max_error = 0.01,
+        windowsize = c(1400, 850),
+        background = "#252a32",
+        zoom = 0.4)
+
+# Use this to adjust the view after building the window object
+render_camera(phi = 65, fov=50, theta = -1, zoom=0.4)
+
+# set up the save out 
+outfile <- "figs/day13-chloropleth_logging-3d.png"
+
+# make sure to create the file to write to...
+{
+if (!file.exists(outfile)){
+  png::writePNG(matrix(1), target = outfile)
+}
+  
+
+render_highquality(outfile,
+                   interactive = FALSE,
+                   lightaltitude = 70,
+                   samples = 5000) # higher number increases size, may induce hang in rendering
+}
+
+# read in and annotate with imagemagick
+library(magick)
+img <- image_read(outfile)
+image_info(img)
+
+# add title
+img |>
+  image_annotate(text = "Acres logged in CA by county (1997-2022)", 
+                 gravity = "north", degrees = -1,
+                 location = "+10+50", font = "Phosphate",
+                 color = "black", kerning = 5,
+                 size = 50, weight = 100) |>
+  image_annotate(text = "#30DayMapChallenge • Day-13 • Chloropleth", 
+                 gravity = "south", degrees = -1,
+                 location = "-10+100", font = "Phosphate",
+                 color = "black", kerning = 5,
+                 size = 30, weight = 80) |>
+  image_annotate(text = "R. Peek • Data: CalFire Forest Harvest Plans - Historical_TA83", 
+                 gravity = "south", degrees = -1,
+                 location = "-10+50", font = "Roboto Slab",
+                 color = "black", kerning = 2,strokecolor = "black",
+                 size = 20, weight = 200) |>
+  image_write("figs/day13-chloropleth_logging-3d-titled.png")
+
+
+```
