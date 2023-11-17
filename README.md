@@ -104,3 +104,8 @@ Open Street Map. I've made it halfway! This is the Rae Lakes loop in SEKI.
 
 ![](figs/day15-osm-seki.png)
 
+### Day-16
+
+Oceania: GSOD Climate stations that have precip, and temperature data. Polar plots are a little rough but it will have to do until another time.
+
+![](figs/day15-oceania-temp.png)

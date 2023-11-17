@@ -50,7 +50,6 @@ showtext_auto()
 world_sf <- ne_countries(returnclass = "sf")
 
 # get ISD
-GSODR::update_station_list()
 load(system.file("extdata", "isd_history.rda", package = "GSODR"))
 
 # make spatial
@@ -83,9 +82,9 @@ nrow(isd_poly) # 182
 nrow(oceania_crop) # 23579
 
 # plot
-plot(oceania_crop$geometry, bg="black", bgc = alpha('cyan4',0.3))
-plot(isd_poly$geometry, col=alpha("orange",0.8), add=TRUE)
-plot(isd_pts$geometry, col="yellow", bg="black", pch=21, add=TRUE, cex=0.5)
+#plot(oceania_crop$geometry, bg="black", bgc = alpha('cyan4',0.3))
+#plot(isd_poly$geometry, col=alpha("orange",0.8), add=TRUE)
+#plot(isd_pts$geometry, col="yellow", bg="black", pch=21, add=TRUE, cex=0.5)
 
 # check availability for a date range
 stations <- isd_pts[isd_pts$BEGIN <= 20140101 &
@@ -107,7 +106,6 @@ ggplot() +
 
 # pick a few random spots:
 sel_sites <- c("944630-99999", # australia
-               "931860-99999", # new zealand
                "913480-99999", # micronesia
                "486150-99999") # malaysia
                
@@ -129,87 +127,91 @@ clim_month <- climdata %>%
   filter(!is.na(PRCP)) %>% 
   group_by(STNID, MONTH) %>% 
   summarize_at(.vars=c("TEMP","PRCP"), .funs = list(min=min, mean=mean, max=max)) %>% 
-  ungroup()
+  ungroup() |> 
+  left_join(climdata_stations |> select(-MONTH), by="STNID")
 
 # monthly prcp
-mPPT <- ggplot() + geom_col(data=clim_month, aes(x=MONTH, y=PRCP_mean, fill=PRCP_mean), show.legend = T)+
-    theme_minimal() + labs(y="", x="")+
-    theme(plot.background = element_blank(),
-          #legend.position = "left",
-          legend.position = c(-0.25, 0.55),
-          legend.key.height = unit(.15,units = "in"),
-          legend.key.width = unit(.1, units = "in"), 
-          panel.border = element_blank(),
-          axis.text.y = element_blank(),
-          plot.margin = unit(c(0, 0, 0 ,0), "mm")) +
-    scale_fill_viridis_c("Mean \nPPT(in)") +
-    coord_polar() + 
-    facet_wrap(clim_month$STNID~., nrow = 4)
+mPPT <- ggplot() + 
+  geom_col(data=clim_month, aes(x=MONTH, y=PRCP_mean, fill=PRCP_mean), show.legend = T)+
+  theme_minimal() + labs(y="", x="")+
+  scale_x_continuous(breaks=c(1, 4, 7, 10),
+                     labels=c("Jan","Apr","Jul","Oct")) +
+  theme(
+    #plot.background = element_blank(),
+    #legend.position = "left",
+    #legend.position = c(-0.25, 0.55),
+    #legend.key.height = unit(.15,units = "in"),
+    #legend.key.width = unit(.1, units = "in"), 
+    #panel.border = element_blank(),
+    axis.text.y = element_blank(),
+    plot.margin = unit(c(0, 0, 0 ,0), "mm")) +
+  scale_fill_viridis_c("Mean \nPPT (in)") +
+  coord_polar() + 
+  facet_wrap(ISO3C~., nrow = 3)
 mPPT
 
 # YDAY: filter
 clim_day <- climdata %>% 
   filter(!is.na(PRCP)) %>%
   group_by(STNID, YDAY) %>% 
-  summarize_at(.vars=vars(TEMP,PRCP), .funs = list(min=min, mean=mean, max=max))
-summary(clim_day)
+  summarize_at(.vars=vars(TEMP,PRCP), .funs = list(min=min, mean=mean, max=max)) |> 
+  left_join(climdata_stations |> select(-YDAY), by="STNID")
 
 # daily mean temp
 (dTEMP <- ggplot() + 
-    geom_col(data=clim_day, aes(x=YDAY, y=TEMP_mean, fill=TEMP_mean, color=TEMP_mean), show.legend = T)+
+    geom_col(data=clim_day, aes(x=YDAY, y=TEMP_max, fill=TEMP_max, color=TEMP_max),
+             show.legend = T)+
     guides(color="none")+
     theme_ft_rc() +
-    #theme_minimal() + 
+    #theme_minimal() +
     labs(y="", x="") +
     scale_x_continuous(breaks=c(1, 90, 180, 270),
                        labels=c("Jan","Apr","Jul","Oct")) +
     theme(#legend.position = c(-0.3, 0.5),
-          legend.background = element_blank(),
-          legend.key.height = unit(.15,units = "in"),
-          legend.key.width = unit(.1, units = "in"), 
-          panel.border = element_blank(),
+          #legend.background = element_blank(),
+          #legend.key.height = unit(.15,units = "in"),
+          #legend.key.width = unit(.1, units = "in"), 
+          #panel.border = element_blank(),
           strip.text = element_text(color="gray90", face="bold"),
-          axis.text.x = element_text(color="gray60"),
+          #axis.text.x = element_text(color="gray60"),
           axis.text.y = element_blank(),
-          panel.background = element_rect(fill = "#252a32",colour = "#252a32"),
-          plot.background = element_rect(fill = "#252a32", colour = "#252a32"),
-          #plot.margin = margin(5,5,5,5, "mm"))+
+          #panel.background = element_rect(fill = "#252a32",colour = "#252a32"),
+          #plot.background = element_rect(fill = "#252a32", colour = "#252a32"),
           plot.margin = unit(c(0, 0, 0 ,0), "mm")) +
     scale_fill_viridis_c("Mean \nTemp (C)", option = "A") +
     scale_color_viridis_c("Mean \nTemp (C)", option = "A") +
     coord_polar() + 
-    facet_wrap(STNID~., nrow = 4))
-ggsave("figs/tst_strip_plot.png", width = 2.2, height = 4, dpi=300, bg="#252a32")
+    facet_wrap(ISO3C~., nrow = 3))
+#ggsave("figs/tst_strip_plot.png", width = 2.2, height = 4, dpi=300, bg="#252a32")
 
 # make a map
 siteMap <- ggplot() +
-  geom_sf(data=world_oce, fill="gray50", lwd=0.4, alpha=0.4) +
-  geom_sf(data=oceania_crop, fill="brown4", alpha=0.4) +
-  geom_sf(data = stations, size = 2, pch=21, color="black", fill="gold") +
+  geom_sf(data=world_oce, fill="gray10", lwd=0.4, alpha=0.4) +
+  geom_sf(data=oceania_crop, fill="gray99", alpha=0.8) +
+  geom_sf(data = stations, size = 1.2, pch=21, color="black", fill="gold", alpha=0.8) +
   geom_sf(data=climdata_stations, size=3, pch=21, color="white", fill="maroon")+
-  geom_label_repel(data=climdata_stations, aes(label=STNID, geometry=geometry), 
+  geom_label_repel(data=climdata_stations, aes(label=ISO3C, geometry=geometry), 
                    stat = "sf_coordinates", size=3.7,
                    force_pull = 2,force = 2,
                    min.segment.length = .1, 
                    segment.color = "grey50" ) + 
-  ggthemes::theme_map(base_family = "Salsa")+
-  labs(title="GSOD Climate Stations in Oceania",
+  theme_ft_rc(base_family = "Salsa")+
+  #ggthemes::theme_map(base_family = "Salsa")+
+  labs(title="GSOD Climate Stations in Oceania",x="", y="",
        subtitle ="Data: 2014-2023 • #30DayMapChallenge • Day-16",
        caption = "R. Peek • Data: <https://ropensci.github.io/GSODR/>")+
   coord_sf(datum = NA)+
-  theme(panel.background = element_rect(fill=alpha("cyan4", 0.4)),
+  theme(panel.background = element_rect(fill=alpha("cyan4", 0.6)),
         plot.title = element_text(family = "Salsa", size = 30),
         plot.subtitle = element_text(family = "Salsa", size = 20),
-        plot.caption = element_text(family = "Roboto Slab", size=14, color = "gray40"))
+        plot.caption = element_text(family = "Roboto Slab", size=14, color = "gray70"))
 siteMap
 
 # Plot it together using cowplot
-ggdraw(siteMap) +
-  draw_plot(dTEMP, width = 0.45, height = .85, x = 0.67, y = 0)
+(allplot <- ggdraw(siteMap) +
+  draw_plot(dTEMP, width = 0.45, height = 0.95, x = 0.67, y = 0))
 
-library(patchwork)
-siteMap + dTEMP + plot_layout(widths=c(2,0.7))
-#ggsave("img/monthly_ppt_map.png", width = 6, height = 8, units = "in", dpi=300)
+ggsave(filename="figs/day16-oceania-temp.png", bg="#252a32", width = 6, height = 3.7, dpi=300)
 
 
 ```
