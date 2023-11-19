@@ -109,3 +109,9 @@ Open Street Map. I've made it halfway! This is the Rae Lakes loop in SEKI.
 Oceania: GSOD Climate stations that have precip, and temperature data. Polar plots are a little rough but it will have to do until another time.
 
 ![](figs/day16-oceania-temp_crop.png)
+
+### Day-17
+
+Flow! Of Rats via Subways. Not sure this all fits together, but data was fun to play with.
+
+![]("figs/day17-flow-rats.png")
