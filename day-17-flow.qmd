@@ -51,7 +51,7 @@ showtext_auto()
 # Get data -------------
 nyc_counties <- counties("NY") |> 
   filter(NAME %in% c("Kings", "Queens", "New York" )) |> 
-  st_transform(4326)
+  st_transform(4326) |> st_zm()
 
 # get NYC rat and subway data
 rat_dat <- "https://data.cityofnewyork.us/api/views/3q43-55fe/rows.csv?date=20231117&accessType=DOWNLOAD"
@@ -112,12 +112,18 @@ plot(osm_prim_crop$geometry, col="orange", lwd=1, add=TRUE)
 # plot density
 ggplot() +
   geom_sf(data = nyc_counties) +
-  geom_sf(data = osm_scnd_crop, color=alpha("gray50",0.5), lwd=0.5)+
-  geom_sf(data = osm_prim_crop, color=alpha("gray30",0.7), lwd=0.7)+
-  stat_density2d(data=rat_sf_sel, aes(x=longitude, y=latitude, fill = after_stat(level)), n=200, alpha = .8, geom = "polygon", show.legend = FALSE) + 
+  #geom_sf(data = osm_scnd_crop, color=alpha("gray50",0.5), lwd=0.25)+
+  #geom_sf(data = osm_prim_crop, color=alpha("gray30",0.7), lwd=0.5)+
+    geom_sf(data=sub_sf,col=alpha("gray50", 0.5), lwd=0.8, lty=2, 
+          show.legend = FALSE)+
+  stat_density2d(data=rat_sf_sel, aes(x=longitude, y=latitude, fill = after_stat(level)), n=200, alpha = .85, geom = "polygon", show.legend = FALSE) + 
   scale_fill_viridis_c() +
-  geom_sf(data=sub_sf, aes(color= name), lwd=0.8, lty=2, 
-          alpha=0.6, show.legend = FALSE)+
+  # ggrepel::geom_label_repel(data=nyc_counties, aes(label=NAME, geometry=geometry), 
+  #                  stat = "sf_coordinates", size=3.7,
+  #                  force_pull = 2,force = 2,
+  #                  min.segment.length = .1, 
+  #                  segment.color = "grey50") +
+
   labs(title="Rats Near New York Subway Lines",x="", y="",
        subtitle ="#30DayMapChallenge • Day-17 • Flow",
        caption = "R. Peek • <https://data.cityofnewyork.us/Social-Services/Rat-Sightings/3q43-55fe>")+
@@ -127,9 +133,9 @@ ggplot() +
     strip.background = element_rect(fill="white", colour = NA),
     strip.text = element_text(color="black", face="bold", size=20),
     plot.subtitle = element_text(family = "Schoolbell", size=32),
-    plot.caption = element_text(family = "Roboto Slab", size=14)) +
+    plot.caption = element_text(family = "Roboto Slab", size=16)) +
   facet_wrap(.~year, nrow = 2)
 
-ggsave("figs/day17-flow-rats.png", width=11, height=8.5, dpi=300,
+ggsave("figs/day17-flow-rats.png", width=7, height=5, dpi=300,
        bg="white")
 ```
