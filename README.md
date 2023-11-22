@@ -115,3 +115,9 @@ Oceania: GSOD Climate stations that have precip, and temperature data. Polar plo
 Flow! Of Rats via Subways. Not sure this all fits together, but data was fun to play with.
 
 ![](figs/day17-flow-rats.png)
+
+### Day-18
+
+Atmosphere. A measure of drought (EDDI) which is an indicator of atmospheric thirst. Comparing 2022 (a drought year) with 2023, one of the wettest years CA has had. Hotter (higher) values indicate stronger aridity.
+
+![](figs/day18-atmosphere-eddi.png)

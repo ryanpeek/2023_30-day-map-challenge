@@ -32,12 +32,14 @@ EDDI MAPS
 #| echo: true
 #| eval: false
 
-#library(tidycensus)
+library(eddi) # devtools::install_github("earthlab/eddi")
 library(tidyverse)
 library(hrbrthemes)
 library(janitor)
 library(glue)
-library(sf)
+library(sf) # works with vector data
+library(terra)
+library(rnaturalearth) # for install: 
 library(tigris)
 options(tigris_use_cache = TRUE)
 library(colorspace)
@@ -46,94 +48,136 @@ font_add_google("Schoolbell")
 font_add_google("Roboto Slab")
 showtext_auto()
 
-# Get data -------------
-nyc_counties <- counties("NY") |> 
-  filter(NAME %in% c("Kings", "Queens", "New York" )) |> 
-  st_transform(4326) |> st_zm()
+# Get States ----------------------------------------
 
-# get NYC rat and subway data
-rat_dat <- "https://data.cityofnewyork.us/api/views/3q43-55fe/rows.csv?date=20231117&accessType=DOWNLOAD"
+us_states <- c("Oregon", "Nevada", "California")
 
-sub_dat <- "https://data.cityofnewyork.us/api/geospatial/3qz8-muuu?method=export&format=GeoJSON"
+wus <- ne_states("United States of America", returnclass = "sf") |> 
+  filter(
+    name %in% c(us_states)) |> 
+  st_transform(4326) 
 
-rat_df <- read_csv(rat_dat) |> clean_names()
-sub_sf <- st_read(sub_dat)
+wus_uni <- st_union(wus) |> 
+  st_transform(crs = 4326)
+#st_transform(crs = albersusa::us_laea_proj)
 
-# filter out to XY data
-rat_sf <- rat_df |> 
-  filter(!is.na(latitude)) |>
-  st_as_sf(coords=c("longitude","latitude"), remove=FALSE, crs=4326) |>
-  mutate(date = mdy_hms(created_date),
-         year = year(date)) |> 
-  relocate(date, year, .before = agency)
+# get boundary box
+bb <- st_bbox(wus_uni)
 
-# crop to just the areas in NYC selected counties
-rat_sf_sel <- rat_sf[nyc_counties,]
+# Get Data 1: ------------------------------------------------------------
 
-# filter to recent years
-rat_sf_sel <- rat_sf_sel |> 
-  filter(year > 2015)
-#table(rat_sf_sel$year)
+# Comparison dates
+stdate1 <- "2022-08-01"
+stdate2 <- "2023-08-01"
+time_int <- "8 month"
+mon <- month.name[month(ymd(stdate1))]
 
-# get osm data
-library(osmdata)
-osm_prim <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("primary")) |> 
-  osmdata_sf()
+# get monthly data as a raster
+edd_1 <- get_eddi(date = stdate1, timescale = time_int)
+edd_2 <- get_eddi(date = stdate2, timescale = time_int)
 
-osm_secondary <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("secondary")) |> 
-  osmdata_sf()
+# convert and trim
+edd_1_clip <- terra::rast(edd_1) |> 
+  terra::crop(st_as_sf(wus_uni)) |> 
+  terra::mask(st_as_sf(wus_uni))
+#plot(edd_1_clip, col=viridis::viridis(n = 256, option = "A"))
+edd_2_clip <- terra::rast(edd_2) |> 
+  terra::crop(st_as_sf(wus_uni)) |> 
+  terra::mask(st_as_sf(wus_uni))
+plot(edd_2_clip, col=viridis::viridis(n = 256, option = "A"))
 
-osm_tert <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("tertiary")) |> 
-  osmdata_sf()
+# convert to dataframe
+eddi_df1 <- terra::as.data.frame(edd_1_clip, xy=TRUE)
+colnames(eddi_df1) <- c("x", "y", "value")
+eddi_df2 <- terra::as.data.frame(edd_2_clip, xy=TRUE)
+colnames(eddi_df2) <- c("x", "y", "value")
 
-# crop
-osm_prim_crop <- osm_prim$osm_lines[nyc_counties,]
-osm_scnd_crop <- osm_secondary$osm_lines[nyc_counties,]
-osm_tert_crop <- osm_tert$osm_lines[nyc_counties,]
+# GGPLOT ------------------------------------------------------------------
 
-# quickplot
-plot(osm_tert_crop$geometry, col="red4", lwd=0.4)
-plot(osm_scnd_crop$geometry, col="gray", lwd=0.5, add=TRUE)
-plot(osm_prim_crop$geometry, col="orange", lwd=1, add=TRUE)
+(g1 <- ggplot() +
+  geom_sf(data = wus, fill = "black", color = "#2b2b2b", size = 0.12) +
+  geom_tile(data = eddi_df1, aes(x, y, fill = value)) +
+  geom_sf(data = wus, fill = NA, color = "#b2b2b2", size = 0.125) +
+  geom_sf(data = wus_uni, fill = NA, color = "white", size = .25) +
+  scale_fill_viridis_c(name = "EDDI", option = "A", limits=c(-2.5,2.5), na.value = "#252a32") +
+  coord_sf(crs = 4326, datum = NA) +
+  guides(fill = guide_colourbar(title.position = "top")) +
+  labs(
+    x = NULL, y = NULL,
+    title = "Aug 2022") +
+    #subtitle = "#30DayMapChallenge • Day-18 • Atmosphere",
+    #caption = "R. Peek • EDDI: Index of how anomalous the atmospheric evaporative\ndemand is (the thirst of the atmosphere)\nData: <https://www.earthdatascience.org/eddi>") +
+   theme_ft_rc(base_family = "Roboto Slab", 
+               plot_title_size = 30, grid="", 
+               subtitle_size = 20,
+               caption_family = "Roboto Condensed",
+               plot_margin = margin(20, 30, 15, 40)) +
+  #theme(legend.position = c(0.75, 0.7)) +
+  theme(legend.direction = "vertical",
+        legend.key.width = unit(1.1, "lines"),
+        legend.key.height = unit(1, "lines"),
+        plot.subtitle = element_text(family = "Roboto Slab", color="gray80", size = 20),
+        plot.caption = element_text(color="gray80", size = 16, hjust = 0),
+        legend.title = element_text(color="gray80", face = "bold", size=16),
+        legend.text = element_text(color="gray80", size=14),
+        panel.background = element_rect(color = "#252a32", fill = "#252a32"),
+        plot.background = element_rect(fill = "#252a32")))
 
 
+(g2 <- ggplot() +
+  geom_sf(data = wus, fill = "black", color = "#2b2b2b", size = 0.12) +
+  geom_tile(data = eddi_df2, aes(x, y, fill = value)) +
+  geom_sf(data = wus, fill = NA, color = "#b2b2b2", size = 0.125) +
+  geom_sf(data = wus_uni, fill = NA, color = "white", size = .25) +
+  scale_fill_viridis_c(name = "EDDI", option = "A", limits=c(-2.5,2.5), na.value = "#252a32") +
+  coord_sf(crs = 4326, datum = NA) +
+  guides(fill = guide_colourbar(title.position = "top")) +
+  labs(
+    x = NULL, y = NULL,
+    title = "Aug 2023") +
+    #subtitle = "#30DayMapChallenge • Day-18 • Atmosphere",
+     #caption = "A measure of the atmospheric evaporative demand or 'the thirst of the atmosphere'. \nData: <https://www.earthdatascience.org/eddi>  |  By: @riverpeek@vis.social") +  
+    #caption = "R. Peek • EDDI: Index of how anomalous the atmospheric evaporative\ndemand is (the thirst of the atmosphere)\nData: <https://www.earthdatascience.org/eddi>") +
+   theme_ft_rc(base_family = "Roboto Slab", 
+               plot_title_size = 30, grid="", 
+               subtitle_size = 20,
+               caption_family = "Roboto Condensed",
+               plot_margin = margin(20, 30, 15, 40)) +
+  #theme(legend.position = c(0.75, 0.7)) +
+  theme(legend.direction = "vertical",
+        legend.key.width = unit(1.1, "lines"),
+        legend.key.height = unit(1, "lines"),
+        plot.subtitle = element_text(family = "Roboto Slab", color="gray80", size = 20),
+        plot.caption = element_text(color="gray80", size = 16, hjust = 0),
+        legend.title = element_text(color="gray80", face = "bold", size=16),
+        legend.text = element_text(color="gray80", size=16),
+        panel.background = element_rect(color = "#252a32", fill = "#252a32"),
+        plot.background = element_rect(fill = "#252a32")))
 
-# plot density
-ggplot() +
-  geom_sf(data = nyc_counties) +
-  #geom_sf(data = osm_scnd_crop, color=alpha("gray50",0.5), lwd=0.25)+
-  #geom_sf(data = osm_prim_crop, color=alpha("gray30",0.7), lwd=0.5)+
-    geom_sf(data=sub_sf,col=alpha("gray50", 0.5), lwd=0.8, lty=2, 
-          show.legend = FALSE)+
-  stat_density2d(data=rat_sf_sel, aes(x=longitude, y=latitude, fill = after_stat(level)), n=200, alpha = .85, geom = "polygon", show.legend = FALSE) + 
-  scale_fill_viridis_c() +
-  # ggrepel::geom_label_repel(data=nyc_counties, aes(label=NAME, geometry=geometry), 
-  #                  stat = "sf_coordinates", size=3.7,
-  #                  force_pull = 2,force = 2,
-  #                  min.segment.length = .1, 
-  #                  segment.color = "grey50") +
+# patchwork ---------------------
 
-  labs(title="Rats Near New York Subway Lines",x="", y="",
-       subtitle ="#30DayMapChallenge • Day-17 • Flow",
-       caption = "R. Peek • <https://data.cityofnewyork.us/Social-Services/Rat-Sightings/3q43-55fe>")+
-  ggthemes::theme_map(base_family = "Schoolbell") +
-  theme(
-    plot.title = element_text(family = "Schoolbell", size=40),
-    strip.background = element_rect(fill="white", colour = NA),
-    strip.text = element_text(color="black", face="bold", size=20),
-    plot.subtitle = element_text(family = "Schoolbell", size=32),
-    plot.caption = element_text(family = "Roboto Slab", size=16)) +
-  facet_wrap(.~year, nrow = 2)
+library(patchwork)
 
-ggsave("figs/day17-flow-rats.png", width=7, height=5, dpi=300,
-       bg="white")
+# plot
+patch1 <- (g1 + theme(legend.position = "none",
+            plot.caption = element_blank()) +
+    g2 + theme(plot.subtitle = element_blank(),
+             plot.caption = element_blank()))
+
+(patchplot <- patch1 +
+    plot_annotation(
+      title = "EDDI: Evaporative Demand Drought Index",
+      subtitle =  "A measure of the atmospheric evaporative demand or 'the thirst of the atmosphere'.\nHigher values indicate greater 'thirst' • #30DayMapChallenge • Day-18 • Atmosphere",
+    caption = "Aggregated over a 8-month window ending in August\nData: <https://www.earthdatascience.org/eddi>  •  R. Peek, 2023",
+    theme = theme(
+      plot.title = element_text(family = 'Roboto Slab', size = 38, color = "white", face = "bold"),
+      plot.subtitle = element_text(family = 'Roboto Slab', size = 24, color = "gray80"),
+      plot.caption = element_text('Roboto Slab', size=20, color="white"),
+      plot.background = element_rect(color = "#252a32", fill = "#252a32"),
+      panel.background = element_rect(color = "#252a32", fill = "#252a32"))))
+
+# save w ggsave
+ggsave(patchplot, height = 7, width = 11, units="in", dpi=300, bg="#252a32", 
+       filename = glue("figs/day18-atmosphere-eddi.png"))
+
 ```
