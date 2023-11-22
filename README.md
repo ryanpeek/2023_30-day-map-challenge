@@ -121,3 +121,9 @@ Flow! Of Rats via Subways. Not sure this all fits together, but data was fun to 
 Atmosphere. A measure of drought (EDDI) which is an indicator of atmospheric thirst. Comparing 2022 (a drought year) with 2023, one of the wettest years CA has had. Hotter (higher) values indicate stronger aridity.
 
 ![](figs/day18-atmosphere-eddi.png)
+
+### Day-19
+
+5 min map. This took a bit longer to render and save, but data from CalFire are fire perimeters. Colored by year of fire.
+
+![](figs/day19-five-min-map.png)

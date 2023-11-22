@@ -33,90 +33,55 @@ Precip Noaa?
 #| eval: false
 
 library(tidyverse)
-library(lubridate)
-library(httr)
 library(glue)
 library(fs)
+library(sf)
 library(tigris)
-library(ggdark)
+library(rmapshaper)
 options(tigris_use_cache = TRUE)
 library(colorspace)
 library(showtext)
-font_add_google("Schoolbell")
-font_add_google("Roboto Slab")
+font_add_google("Peralta")
 showtext_auto()
-library(gganimate)
-library(transformr)
 
-# Pull Data --------------------------------------------------------------------
-# https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/divisional/mapping/4/pdsi/202207/1/value
-# https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/time-series/CA-017/pcp/36/10/1895-2022.csv?filter=true&filterType=loess
+# fire perimeters gdb
+# https://34c031f8-c9fd-4018-8c5a-4159cdff6b0d-cdn-endpoint.azureedge.net/-/media/calfire-website/what-we-do/fire-resource-assessment-program---frap/gis-data/april-2023/fire221gdb.zip?rev=9e3e1e5e61e242d5b2994d666d72a91a&hash=F424990CD64BB7C4CF01C6CE211C0A59
 
-# list of counties
-cntys <- list_counties("CA")
-cntys_sf <- tigris::counties(state="CA")
-county_sel <- c("Kern", "Sacramento", "El Dorado", "Sonoma")
-cnty <- filter(cntys, county %in% county_sel) %>%
-  pull(county_code)
+# check layers for fire perims
+st_layers("/Users/rapeek/Downloads/fire22_1.gdb")
 
-# years
-yr_start <- 1895 # can start 1895
-yr_end <- 2023
+# fire perimeters
+firep22 <- st_read("/Users/rapeek/Downloads/fire22_1.gdb", "firep22_1")
+st_crs(firep22)
+firep22$year <- as.integer(firep22$YEAR_)
 
-# month
-mon <- 08
+# get boundaries
+ca <- tigris::states() |> filter(STUSPS=="CA") |> st_transform(3310)
+cnty <- tigris::counties(state="CA") |> st_transform(3310)
 
-# interval: 1-12 mon, 18,24, 36, 48, 60
-interval <- 36
+# ca map
+gg1 <- ggplot() + 
+  geom_sf(data=cnty, fill=NA, color="gray50") +
+  geom_sf(data=ca, fill=NA, color="gray70", lwd=1) +
+  geom_sf(data=firep22, aes(fill=year), alpha=0.7, linewidth=0.1) +
+  scale_fill_viridis_c("Year", 
+                        option="B")+
+  coord_sf(label_graticule = "", datum = NA) +
+  hrbrthemes::theme_ft_rc(
+    base_family = "Peralta", caption_size = 18) +
+  labs(title="California Fire Perimeters",
+       subtitle = "#30DayMapChallenge • Day-19 • 5-min-map",
+       caption = "R. Peek • Data: https://www.fire.ca.gov/ \n <https://github.com/ryanpeek/2023_30-day-map-challenge/>") +
+  guides(linewidth="none")+
+  theme(
+    plot.title = element_text(family = "Peralta",size = 46, color="gray80"),
+    plot.subtitle = element_text(family = "Roboto Slab", size=36, color="gray80"),
+    plot.caption = element_text(color="gray80", family = "Roboto Slab", size = 20),
+    legend.title = element_text(size = 16, color="gray80", face = "bold"),
+    legend.text = element_text(size = 16, color="gray80"))
+gg1
 
-# build url for county CA
-make_url <- glue("https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/time-series/CA-{cnty}/pcp/{interval}/{mon}/{yr_start}-{yr_end}.csv?base_prd=true&begbaseyear={yr_start}&endbaseyear={yr_end}&filter=true&filterType=binomial")
-
-# use url
-dat_out <- read_csv(make_url, skip = 4, id = "path")
-dat_out <- dat_out %>%
-  mutate(county_code = substr(gsub("https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/time-series/", "", path), 4,6)) %>%
-  select(-path) %>%
-  left_join(cntys)
-# convert to dates
-dat_out <- dat_out %>%
-  mutate(date = ymd(paste(Date,"01")))
-
-# join with sf
-dat_out_sf <- left_join(cntys_sf, dat_out, by=c("COUNTYFP"="county_code")) |> 
-  filter(!is.na(date)) |> 
-  mutate(year = year(date))
-
-
-# Plot --------------------------------------------------------------------
-# bug in transformr
-# devtools::install_version("transformr", version = "0.1.3")
-
-# plot map
-plot1 <- ggplot() + 
-  geom_sf(data=cntys_sf, color="gray40", alpha=0.5)+
-  geom_sf(data=dat_out_sf, aes(fill=Anomaly)) +
-  colorspace::scale_fill_continuous_diverging("Purple-Brown", rev=TRUE) +
-  hrbrthemes::theme_ft_rc(base_family = "Roboto Slab", plot_title_size = 30,
-                          subtitle_size = 22, grid = FALSE, caption_size = 16)+
-  coord_sf(crs = 4269) +
-  labs(title = "Precip Anomaly for: {round(frame_time, 0)}",
-       subtitle = "Aggegated over 36 months",
-       x=NULL, y=NULL,
-       caption="Data source: Precipitation from <www.ncei.noaa.gov/access/monitoring/climate-at-a-glance>") +
-  theme(plot.subtitle = element_text(color="gray80"),
-        plot.caption = element_text(color="gray80"),
-        legend.text = element_text(color="gray80", size = 18),
-        legend.title = element_text(color="gray80", size = 18),
-        panel.grid.major = element_blank(),
-        plot.background = element_rect("#252a32")) +
-  transition_time(year) +
-  ease_aes('linear')
-
-plot1
-
-anim_save("figs/day19-five-min-map.gif", plot1, width = 1200, height = 1500)
-
-
+# render takes longer than code!!
+ggsave(plot=gg1, filename="figs/day19-five-min-map.png", width = 7, height = 10, units = "in", dpi = 300)
 
 ```
