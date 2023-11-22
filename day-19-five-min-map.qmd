@@ -1,0 +1,122 @@
+---
+title: '2023 30-day Map Challenge • Day 19 • Five Minute Map'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## 5 Min Map
+
+Precip Noaa?
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+library(lubridate)
+library(httr)
+library(glue)
+library(fs)
+library(tigris)
+library(ggdark)
+options(tigris_use_cache = TRUE)
+library(colorspace)
+library(showtext)
+font_add_google("Schoolbell")
+font_add_google("Roboto Slab")
+showtext_auto()
+library(gganimate)
+library(transformr)
+
+# Pull Data --------------------------------------------------------------------
+# https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/divisional/mapping/4/pdsi/202207/1/value
+# https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/time-series/CA-017/pcp/36/10/1895-2022.csv?filter=true&filterType=loess
+
+# list of counties
+cntys <- list_counties("CA")
+cntys_sf <- tigris::counties(state="CA")
+county_sel <- c("Kern", "Sacramento", "El Dorado", "Sonoma")
+cnty <- filter(cntys, county %in% county_sel) %>%
+  pull(county_code)
+
+# years
+yr_start <- 1895 # can start 1895
+yr_end <- 2023
+
+# month
+mon <- 08
+
+# interval: 1-12 mon, 18,24, 36, 48, 60
+interval <- 36
+
+# build url for county CA
+make_url <- glue("https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/time-series/CA-{cnty}/pcp/{interval}/{mon}/{yr_start}-{yr_end}.csv?base_prd=true&begbaseyear={yr_start}&endbaseyear={yr_end}&filter=true&filterType=binomial")
+
+# use url
+dat_out <- read_csv(make_url, skip = 4, id = "path")
+dat_out <- dat_out %>%
+  mutate(county_code = substr(gsub("https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/time-series/", "", path), 4,6)) %>%
+  select(-path) %>%
+  left_join(cntys)
+# convert to dates
+dat_out <- dat_out %>%
+  mutate(date = ymd(paste(Date,"01")))
+
+# join with sf
+dat_out_sf <- left_join(cntys_sf, dat_out, by=c("COUNTYFP"="county_code")) |> 
+  filter(!is.na(date)) |> 
+  mutate(year = year(date))
+
+
+# Plot --------------------------------------------------------------------
+# bug in transformr
+# devtools::install_version("transformr", version = "0.1.3")
+
+# plot map
+plot1 <- ggplot() + 
+  geom_sf(data=cntys_sf, color="gray40", alpha=0.5)+
+  geom_sf(data=dat_out_sf, aes(fill=Anomaly)) +
+  colorspace::scale_fill_continuous_diverging("Purple-Brown", rev=TRUE) +
+  hrbrthemes::theme_ft_rc(base_family = "Roboto Slab", plot_title_size = 30,
+                          subtitle_size = 22, grid = FALSE, caption_size = 16)+
+  coord_sf(crs = 4269) +
+  labs(title = "Precip Anomaly for: {round(frame_time, 0)}",
+       subtitle = "Aggegated over 36 months",
+       x=NULL, y=NULL,
+       caption="Data source: Precipitation from <www.ncei.noaa.gov/access/monitoring/climate-at-a-glance>") +
+  theme(plot.subtitle = element_text(color="gray80"),
+        plot.caption = element_text(color="gray80"),
+        legend.text = element_text(color="gray80", size = 18),
+        legend.title = element_text(color="gray80", size = 18),
+        panel.grid.major = element_blank(),
+        plot.background = element_rect("#252a32")) +
+  transition_time(year) +
+  ease_aes('linear')
+
+plot1
+
+anim_save("figs/day19-five-min-map.gif", plot1, width = 1200, height = 1500)
+
+
+
+```

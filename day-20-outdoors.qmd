@@ -1,0 +1,139 @@
+---
+title: '2023 30-day Map Challenge • Day 20 • Outdoors'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Outdoors
+
+Cool 3d map of terrain (NFA 3d?)
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+#library(tidycensus)
+library(tidyverse)
+library(hrbrthemes)
+library(janitor)
+library(glue)
+library(sf)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(colorspace)
+library(showtext)
+font_add_google("Schoolbell")
+font_add_google("Roboto Slab")
+showtext_auto()
+
+# Get data -------------
+nyc_counties <- counties("NY") |> 
+  filter(NAME %in% c("Kings", "Queens", "New York" )) |> 
+  st_transform(4326) |> st_zm()
+
+# get NYC rat and subway data
+rat_dat <- "https://data.cityofnewyork.us/api/views/3q43-55fe/rows.csv?date=20231117&accessType=DOWNLOAD"
+
+sub_dat <- "https://data.cityofnewyork.us/api/geospatial/3qz8-muuu?method=export&format=GeoJSON"
+
+rat_df <- read_csv(rat_dat) |> clean_names()
+sub_sf <- st_read(sub_dat)
+
+# filter out to XY data
+rat_sf <- rat_df |> 
+  filter(!is.na(latitude)) |>
+  st_as_sf(coords=c("longitude","latitude"), remove=FALSE, crs=4326) |>
+  mutate(date = mdy_hms(created_date),
+         year = year(date)) |> 
+  relocate(date, year, .before = agency)
+
+# crop to just the areas in NYC selected counties
+rat_sf_sel <- rat_sf[nyc_counties,]
+
+# filter to recent years
+rat_sf_sel <- rat_sf_sel |> 
+  filter(year > 2015)
+#table(rat_sf_sel$year)
+
+# get osm data
+library(osmdata)
+osm_prim <- getbb("New York City") |> 
+  opq() |> 
+  add_osm_feature(key = "highway", 
+                  value = c("primary")) |> 
+  osmdata_sf()
+
+osm_secondary <- getbb("New York City") |> 
+  opq() |> 
+  add_osm_feature(key = "highway", 
+                  value = c("secondary")) |> 
+  osmdata_sf()
+
+osm_tert <- getbb("New York City") |> 
+  opq() |> 
+  add_osm_feature(key = "highway", 
+                  value = c("tertiary")) |> 
+  osmdata_sf()
+
+# crop
+osm_prim_crop <- osm_prim$osm_lines[nyc_counties,]
+osm_scnd_crop <- osm_secondary$osm_lines[nyc_counties,]
+osm_tert_crop <- osm_tert$osm_lines[nyc_counties,]
+
+# quickplot
+plot(osm_tert_crop$geometry, col="red4", lwd=0.4)
+plot(osm_scnd_crop$geometry, col="gray", lwd=0.5, add=TRUE)
+plot(osm_prim_crop$geometry, col="orange", lwd=1, add=TRUE)
+
+
+
+# plot density
+ggplot() +
+  geom_sf(data = nyc_counties) +
+  #geom_sf(data = osm_scnd_crop, color=alpha("gray50",0.5), lwd=0.25)+
+  #geom_sf(data = osm_prim_crop, color=alpha("gray30",0.7), lwd=0.5)+
+    geom_sf(data=sub_sf,col=alpha("gray50", 0.5), lwd=0.8, lty=2, 
+          show.legend = FALSE)+
+  stat_density2d(data=rat_sf_sel, aes(x=longitude, y=latitude, fill = after_stat(level)), n=200, alpha = .85, geom = "polygon", show.legend = FALSE) + 
+  scale_fill_viridis_c() +
+  # ggrepel::geom_label_repel(data=nyc_counties, aes(label=NAME, geometry=geometry), 
+  #                  stat = "sf_coordinates", size=3.7,
+  #                  force_pull = 2,force = 2,
+  #                  min.segment.length = .1, 
+  #                  segment.color = "grey50") +
+
+  labs(title="Rats Near New York Subway Lines",x="", y="",
+       subtitle ="#30DayMapChallenge • Day-17 • Flow",
+       caption = "R. Peek • <https://data.cityofnewyork.us/Social-Services/Rat-Sightings/3q43-55fe>")+
+  ggthemes::theme_map(base_family = "Schoolbell") +
+  theme(
+    plot.title = element_text(family = "Schoolbell", size=40),
+    strip.background = element_rect(fill="white", colour = NA),
+    strip.text = element_text(color="black", face="bold", size=20),
+    plot.subtitle = element_text(family = "Schoolbell", size=32),
+    plot.caption = element_text(family = "Roboto Slab", size=16)) +
+  facet_wrap(.~year, nrow = 2)
+
+ggsave("figs/day17-flow-rats.png", width=7, height=5, dpi=300,
+       bg="white")
+```
