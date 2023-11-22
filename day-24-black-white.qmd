@@ -1,0 +1,110 @@
+---
+title: '2023 30-day Map Challenge • Day 24 • Black & White'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Black and White
+
+Light pollution
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+library(hrbrthemes)
+library(janitor)
+library(glue)
+library(sf)
+library(rnaturalearth)
+library(terra)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(colorspace)
+library(showtext)
+font_add_google("Bebas Neue")
+font_add_google("Roboto Slab")
+showtext_auto()
+
+# data
+wcoast <- ne_states("United States of America", returnclass = "sf") |> 
+  filter(name %in% c("California", "Oregon", "Nevada")) 
+wcoast_union <- st_union(wcoast) |> st_transform(5070)
+
+# if this doesn't work, can download via: https://www2.census.gov/geo/tiger/TIGER2022/UAC/
+#urban <- urban_areas(cb = TRUE, class = "sf") |>  st_transform(st_crs(wcoast))
+urban <- st_read("data_raw/tl_2022_us_uac20/tl_2022_us_uac20.shp") |> st_transform(st_crs(wcoast_union))
+urban <- urban[wcoast_union,]
+
+# get blackmarble data
+if (!all(file.exists(here::here("data_raw", 
+                                c("BlackMarble_2016_3km_geo.tif",
+                                  "bm_df.rds"))))) {
+  download.file(
+    url = "https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/BlackMarble_2016_3km_geo.tif",
+    destfile = here::here("data_raw/BlackMarble_2016_3km_geo.tif")
+  )
+  if (!file.exists(here::here("bm_df.rds"))) {
+    bm <- rast(here::here("data_raw/BlackMarble_2016_3km_geo.tif"))
+    bm <- terra::crop(bm, wcoast, mask=TRUE)
+    bm <- project(bm, crs(vect(wcoast_union)), method="bilinear")
+    bm_df <- as.data.frame(bm, xy=TRUE)
+    # add avg of 3 cols for grayscale
+    bm_df <- bm_df |> 
+      mutate(gray_avg = (BlackMarble_2016_3km_geo_1 + BlackMarble_2016_3km_geo_2 + BlackMarble_2016_3km_geo_3 ) / 3)
+    saveRDS(bm_df, "data_raw/bm_df.rds")
+  }
+}
+
+bm_df <- readRDS("data_raw/bm_df.rds")
+
+ggplot() +
+  geom_sf(data = wcoast, fill = "black", color = "#2b2b2b", size = 0.125) +
+  geom_sf(data = urban, fill = alpha("gray30", 0.1), color = "gray80", size = 0.15) +
+  geom_tile(data = bm_df, aes(x, y, fill = gray_avg)) +
+  geom_sf(data = wcoast, fill = NA, color = "#b2b2b2", size = 0.125) +
+  geom_sf(data = wcoast_union, fill = NA, color = "gray70", size = 1/4) +
+  scale_fill_gradient2("Brightness", low = "black", mid = "gray50", midpoint = 110, high = "white")+
+  #scale_fill_gradientn("Brightness", colors=mygraycolors)+
+  coord_sf(crs = 5070, datum = NA) +
+  guides(fill = guide_colourbar(title.position = "top")) +
+  labs(
+    x = NULL, y = NULL,
+    title = "West Coast Urban Areas And Light Pollution",
+    subtitle = "#30DayMapChallenge • Day-24 • Black & White",
+    caption = "R. Peek • Data: NASA Earth Observatory 'Black Marble'\n <earthobservatory.nasa.gov/features/NightLights/page3.php>"
+  ) +
+  theme_ft_rc(base_family = "Bebas Neue", grid="", plot_title_size = 44,
+              subtitle_family = "Bebas Neue", subtitle_size = 30,
+              caption_family = "Roboto Slab", caption_size = 20) +
+  theme(legend.direction = "vertical", 
+        legend.key.width = unit(1, "lines"), 
+        legend.key.height = unit(1, "lines"),
+        legend.title = element_text(size=20),
+        legend.text = element_text(size=20),
+        panel.background = element_rect(color = "#252a32", fill = "#252a32"))
+
+ggsave("figs/day24-black-white-marble.png", width=5, height=7, dpi=300,
+       bg="#252a32")
+```
