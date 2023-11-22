@@ -1,0 +1,106 @@
+---
+title: '2023 30-day Map Challenge • Day 21 • Raster'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Raster
+
+Cool 3d map of terrain (see knoxville?)
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+library(hrbrthemes)
+library(janitor)
+library(glue)
+library(sf)
+library(terra)
+library(elevatr)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(colorspace)
+library(showtext)
+font_add_google("Schoolbell")
+font_add_google("Roboto Slab")
+showtext_auto()
+
+
+# Get Elev: elevatr ---------------------------------------------------
+# elevatr zoom levels roughly
+# 11=30m, 12=15m, 13=7m
+
+# get park boundaries here: https://www.parks.ca.gov/?page_id=29682
+# https://opendata.arcgis.com/datasets/0fea4fa1db734794bdb3b5410bb3eed9_0.gdb?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D
+st_layers("data_raw/stateParkBoundaries.gdb")
+park_b <- st_read("data_raw/stateParkBoundaries.gdb/", "ParkBoundaries") |> st_make_valid()
+
+# filter to auburn rec
+aub <- park_b |> filter(grepl("Auburn", UNITNAME)) |> 
+  st_transform(3310)
+# plot(aub$SHAPE)
+# st_crs(aub)
+
+# get the data!
+elev <- get_elev_raster(aub, z = 13)
+
+# now mask and crop
+rast_crop_e <- elev  |> 
+  crop(aub, mask=TRUE) |> terra::rast()
+rast_crop_e
+#plot(rast_crop_e)
+#title("30m DEM elevatr")
+
+library(tmap)
+
+tm_shape(rast_crop_e, raster.downsample = FALSE) + tm_raster(palette = "viridis", legend.show = FALSE) +
+  tm_compass(size = 1) + tm_scale_bar() 
+
+# Get Aspect and TRI ------------------------------------------------------
+
+# calc aspect
+rast_tri <- terra::terrain(rast_crop_e, "TRI", neighbors=8)
+rast_asp <- terra::terrain(rast_crop_e, "aspect", neighbors=8)
+
+tm_shape(rast_tri, raster.downsample = FALSE) + 
+  tm_raster(palette = "viridis", legend.show = FALSE) +
+  tm_compass(size = 1) + tm_scale_bar() 
+
+tm_shape(rast_asp, raster.downsample = TRUE) + 
+  tm_raster(palette = "viridis", legend.show = FALSE) +
+  tm_compass(size = 1) + tm_scale_bar() 
+
+# ggplot plot
+ggplot(as.data.frame(rast_tri, xy=T)) + 
+  geom_raster(aes(x=x, y=y, fill=TRI)) +
+  scale_fill_viridis_c("TRI",option = "turbo", na.value=NA) +
+  theme_void(base_family = "Atkinson Hyperlegible")+
+  theme(legend.position = "right",
+        legend.text = element_text(color="white")) +
+  labs(x="", y="")
+
+ggsave("figs/day21-raster-tri.png", width=7, height=5, dpi=300,
+       bg="black")
+```
