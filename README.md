@@ -114,4 +114,4 @@ Oceania: GSOD Climate stations that have precip, and temperature data. Polar plo
 
 Flow! Of Rats via Subways. Not sure this all fits together, but data was fun to play with.
 
-![]("figs/day17-flow-rats.png")
+![](figs/day17-flow-rats.png)
