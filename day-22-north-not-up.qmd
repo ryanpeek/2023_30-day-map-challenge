@@ -32,108 +32,170 @@ orientation of rivers use existing code
 #| echo: true
 #| eval: false
 
-#library(tidycensus)
+# CODE ADAPTED FROM
+# https://github.com/USGS-VIZLAB/chart-challenge-22/tree/main/11_circular_lkoenig
+# @lkoenig
+# BY R. PEEK, 2022-04-12
+
 library(tidyverse)
 library(hrbrthemes)
 library(janitor)
 library(glue)
+library(patchwork)
+library(nhdplusTools)
 library(sf)
+library(ggspatial)
 library(tigris)
 options(tigris_use_cache = TRUE)
-library(colorspace)
 library(showtext)
-font_add_google("Schoolbell")
-font_add_google("Roboto Slab")
-showtext_auto()
+library(colorspace)
 
-# Get data -------------
-nyc_counties <- counties("NY") |> 
-  filter(NAME %in% c("Kings", "Queens", "New York" )) |> 
-  st_transform(4326) |> st_zm()
+# Source helper functions
+source("code/f_orientation_helpers.R")
 
-# get NYC rat and subway data
-rat_dat <- "https://data.cityofnewyork.us/api/views/3q43-55fe/rows.csv?date=20231117&accessType=DOWNLOAD"
+# Set up fonts for plots
+font_add_google("Hepta Slab")
 
-sub_dat <- "https://data.cityofnewyork.us/api/geospatial/3qz8-muuu?method=export&format=GeoJSON"
+# Define huc8 sub-basins
+# note: HUC8 subsets from the watershed boundary dataset (WBD) were used for
+# convenience for this river orientation visualization, to represent a reasonable,
+# "medium" scale of analysis and so that a user wouldn't need to have the national
+# hydrography dataset (NHDPlusv2) downloaded locally. The selected HUC8 id's
+# represent 'whole' watersheds/river networks, but not all HUC8 subsets do (i.e.,
+# they may represent just a portion of a watershed).
+huc8_tbl <- tibble(huc8_id = c("18020121", "18090208"),
+                   huc8_name = c("North Fork Feather","Mojave"))
 
-rat_df <- read_csv(rat_dat) |> clean_names()
-sub_sf <- st_read(sub_dat)
+# Fetch NHDv2 flowlines for each huc8 basin
+flines <- lapply(huc8_tbl$huc8_id, fetch_flowlines)
 
-# filter out to XY data
-rat_sf <- rat_df |> 
-  filter(!is.na(latitude)) |>
-  st_as_sf(coords=c("longitude","latitude"), remove=FALSE, crs=4326) |>
-  mutate(date = mdy_hms(created_date),
-         year = year(date)) |> 
-  relocate(date, year, .before = agency)
+# Estimate channel orientation (i.e., azimuth) for each huc8 basin
+flines_azimuth <- lapply(flines, function(x){
+  az_df <- x %>%
+    split(., 1:length(.$geometry)) %>%
+    purrr::map_dfr(~mutate(., azimuth = calc_azimuth_circ_mean(.)))
+  return(az_df)
+})
 
-# crop to just the areas in NYC selected counties
-rat_sf_sel <- rat_sf[nyc_counties,]
+# Format channel orientation table
+flines_azimuth_df <- do.call("rbind", flines_azimuth) %>%
+  select(huc8_id, azimuth, streamorde, lengthkm) %>%
+  # add huc8 name to this table
+  left_join(huc8_tbl, by = "huc8_id") %>%
+  # define order of huc8's
+  mutate(huc8_name_ord = factor(huc8_name,
+                           levels = c("North Fork Feather",
+                                      "Mojave"))) %>%
+  relocate(geometry, .after = last_col())
 
-# filter to recent years
-rat_sf_sel <- rat_sf_sel |> 
-  filter(year > 2015)
-#table(rat_sf_sel$year)
+# Assemble plot
 
-# get osm data
-library(osmdata)
-osm_prim <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("primary")) |> 
-  osmdata_sf()
+# A couple steps so that coord_polar will allow free scales for facets,
+# grabbed from https://github.com/tidyverse/ggplot2/issues/2815
+cp <- coord_polar()
+cp$is_free <- function() TRUE
 
-osm_secondary <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("secondary")) |> 
-  osmdata_sf()
+# Create grid containing channel orientation plots
+azimuth_grid <- plot_azimuth(flines_azimuth_df,
+                             cp, fill = "#105073", color = "#09344E") +
+  facet_wrap(~huc8_name_ord, scales = "free_y", ncol = 4) +
+  theme(text = element_text(size = 20),
+        strip.text.x = element_text(size = 20, face = "bold"),
+        plot.background = element_blank(),
+        panel.background = element_blank(),
+        aspect.ratio = 1,
+        panel.grid = element_line(size = 0.2),
+        axis.text.x = element_text(size = 20))
+azimuth_grid
 
-osm_tert <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("tertiary")) |> 
-  osmdata_sf()
-
-# crop
-osm_prim_crop <- osm_prim$osm_lines[nyc_counties,]
-osm_scnd_crop <- osm_secondary$osm_lines[nyc_counties,]
-osm_tert_crop <- osm_tert$osm_lines[nyc_counties,]
-
-# quickplot
-plot(osm_tert_crop$geometry, col="red4", lwd=0.4)
-plot(osm_scnd_crop$geometry, col="gray", lwd=0.5, add=TRUE)
-plot(osm_prim_crop$geometry, col="orange", lwd=1, add=TRUE)
-
+# Save plots
+ggsave(glue::glue("figs/day22-azimuth_grid.png"),
+       plot = azimuth_grid,bg = "white",
+       width = 12, height = 12, units = c("in"),
+       dpi = 300)
 
 
-# plot density
-ggplot() +
-  geom_sf(data = nyc_counties) +
-  #geom_sf(data = osm_scnd_crop, color=alpha("gray50",0.5), lwd=0.25)+
-  #geom_sf(data = osm_prim_crop, color=alpha("gray30",0.7), lwd=0.5)+
-    geom_sf(data=sub_sf,col=alpha("gray50", 0.5), lwd=0.8, lty=2, 
-          show.legend = FALSE)+
-  stat_density2d(data=rat_sf_sel, aes(x=longitude, y=latitude, fill = after_stat(level)), n=200, alpha = .85, geom = "polygon", show.legend = FALSE) + 
-  scale_fill_viridis_c() +
-  # ggrepel::geom_label_repel(data=nyc_counties, aes(label=NAME, geometry=geometry), 
-  #                  stat = "sf_coordinates", size=3.7,
-  #                  force_pull = 2,force = 2,
-  #                  min.segment.length = .1, 
-  #                  segment.color = "grey50") +
+# Mojave -------------------------------------------------------------
 
-  labs(title="Rats Near New York Subway Lines",x="", y="",
-       subtitle ="#30DayMapChallenge • Day-17 • Flow",
-       caption = "R. Peek • <https://data.cityofnewyork.us/Social-Services/Rat-Sightings/3q43-55fe>")+
-  ggthemes::theme_map(base_family = "Schoolbell") +
-  theme(
-    plot.title = element_text(family = "Schoolbell", size=40),
-    strip.background = element_rect(fill="white", colour = NA),
-    strip.text = element_text(color="black", face="bold", size=20),
-    plot.subtitle = element_text(family = "Schoolbell", size=32),
-    plot.caption = element_text(family = "Roboto Slab", size=16)) +
-  facet_wrap(.~year, nrow = 2)
+# Create "legend" inset plot that explains how to read the polar histograms
+inset_moj_plot <- plot_ntw(filter(flines_azimuth_df, huc8_name == "Mojave"))
+inset_mpolar_plot <- plot_azimuth(filter(flines_azimuth_df,huc8_name == "Mojave"),
+                                 fill = "#105073", color = "#09344E") +
+  theme(plot.margin = unit(c(t=-4, r=15, b=-4, l=0), "lines"),
+        text = element_text(colour = "white", size = 40),
+        plot.background = element_blank(),
+        axis.text = element_text(color="white"),
+        panel.background = element_blank(),
+        aspect.ratio = 1)
 
-ggsave("figs/day17-flow-rats.png", width=7, height=5, dpi=300,
-       bg="white")
+inset_plot1 <- inset_mpolar_plot + inset_element(inset_moj_plot, 0.6, 0.3, 1, 1, align_to = 'full') +
+  plot_annotation(title = expression("The Mojave River (CA) generally flows in the"~bold("north")~"direction"),
+                  subtitle = "from its headwaters in the desert of CA.",
+                  caption = 'The direction of each bar in the polar histogram represents the river orientation and the\nlength of each bar represents the proportion of total river length with that orientation.',
+                  theme = theme(plot.title = element_text(colour = "white",size = 20,
+                                                          hjust = 0),
+                                plot.subtitle = element_text(colour = "white",
+                                                             size = 20, hjust = 0),
+                                plot.caption = element_text(colour = "white",
+                                                            size = 10, hjust = 0),
+                                plot.background = element_rect(fill = "black", colour = "black"),
+                                panel.background = element_rect(fill= "black", color="black"),
+                                aspect.ratio = 1))
+inset_plot1_final <- inset_plot1 + plot_compass(text_size = 11) + plot_annotation(theme=theme(plot.background = element_rect(fill = "black", colour = "black"),
+        panel.background = element_rect(fill = "black", colour = "black")))
+inset_plot1_final
+
+#ggsave("figs/day22-azimuth-moj.png", inset_plot, bg="black",
+#       width = 8, height = 6, units = c("in"), dpi = 300)
+
+# NF Feather -------------------------------------------------------------
+
+# Create "legend" inset plot that explains how to read the polar histograms
+inset_nf_plot <- plot_ntw(filter(flines_azimuth_df, huc8_name == "North Fork Feather"))
+inset_nfpolar_plot <- plot_azimuth(filter(flines_azimuth_df,huc8_name == "North Fork Feather"),
+                                 fill = "#105073", color = "#09344E") +
+  theme(plot.margin = unit(c(t=-4, r=15, b=-4, l=0), "lines"),
+        text = element_text(colour = "white", size = 40),
+        plot.background = element_blank(),
+        axis.text = element_text(color="white"),
+        panel.background = element_blank(),
+        aspect.ratio = 1)
+
+inset_plot2 <- inset_nfpolar_plot + inset_element(inset_nf_plot, 0.6, 0.4, 1, 1, align_to = 'full') +
+  plot_annotation(title = "The NF Feather River (CA) generally flows in the",
+                  subtitle = expression(~bold("southern")~"direction from its headwaters."),
+                  caption = 'The direction of each bar in the polar histogram represents the river orientation and the\nlength of each bar represents the proportion of total river length with that orientation.',
+                  theme = theme(plot.title = element_text(colour = "white",size = 20,
+                                                          hjust = 0),
+                                plot.subtitle = element_text(colour = "white",
+                                                             size = 20, hjust = 0),
+                                plot.caption = element_text(colour = "white",
+                                                            size = 10, hjust = 0),
+                                plot.background = element_rect(fill="black",colour = "black"),
+                                panel.background = element_rect(fill="black", colour = "black"),
+                                aspect.ratio = 1))
+inset_plot2_final <- inset_plot2 + plot_compass(text_size = 11) + plot_annotation(theme=theme(plot.background = element_rect(fill = "black", colour = "black"),
+        panel.background = element_rect(fill = "black", colour = "black")))
+inset_plot2_final
+
+#ggsave("figs/day22-azimuth-nff.png", inset_plot, bg="black",
+#       width = 8, height = 6, units = c("in"), dpi = 300)
+
+
 ```
+
+```{r}
+# combine plots
+
+library(patchwork)
+
+
+gall <- inset_plot1_final /plot_spacer()/ inset_plot2_final +
+  patchwork::plot_layout(widths = c(1.1,-0.2, 1.1)) +
+  plot_annotation(theme=theme(plot.background = element_rect(fill = "black", colour = "black"),
+                              panel.background = element_rect(fill = "black", colour = "black")))
+gall
+
+ggsave(gall, filename = glue("figs/day22-north-not-up.png"), width = 11, height = 8.5, dpi = 300, bg="black")
+```
+
