@@ -127,3 +127,9 @@ Atmosphere. A measure of drought (EDDI) which is an indicator of atmospheric thi
 5 min map. This took a bit longer to render and save, but data from CalFire are fire perimeters. Colored by year of fire.
 
 ![](figs/day19-five-min-map.png)
+
+### Day-22
+
+North is Not Up! Or also, rivers don't always flow south (or west) in CA. 
+
+![](figs/day22-north-not-up.png)
