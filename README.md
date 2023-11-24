@@ -128,6 +128,12 @@ Atmosphere. A measure of drought (EDDI) which is an indicator of atmospheric thi
 
 ![](figs/day19-five-min-map.png)
 
+### Day-20
+
+Outdoors. One of the coolest geologic/glacial features in the Sierras is the Kern Plateau...and in particular the Upper Kern Watershed. This is a map of terrain ruggedness, which gives a sense of the glacial "U" shape of many of the side valleys.
+
+![](figs/day20-outdoors.png)
+
 ### Day-22
 
 North is Not Up! Or also, rivers don't always flow south (or west) in CA. 

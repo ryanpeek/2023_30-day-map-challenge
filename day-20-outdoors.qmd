@@ -32,107 +32,171 @@ Cool 3d map of terrain (NFA 3d?)
 #| echo: true
 #| eval: false
 
-#library(tidycensus)
 library(tidyverse)
 library(hrbrthemes)
 library(janitor)
 library(glue)
 library(sf)
+library(terra)
+library(nhdplusTools)
 library(tigris)
 options(tigris_use_cache = TRUE)
+library(elevatr)
 library(colorspace)
 library(showtext)
-font_add_google("Schoolbell")
 font_add_google("Roboto Slab")
 showtext_auto()
 
 # Get data -------------
-nyc_counties <- counties("NY") |> 
-  filter(NAME %in% c("Kings", "Queens", "New York" )) |> 
-  st_transform(4326) |> st_zm()
 
-# get NYC rat and subway data
-rat_dat <- "https://data.cityofnewyork.us/api/views/3q43-55fe/rows.csv?date=20231117&accessType=DOWNLOAD"
+huc8_df <- tibble(huc8_id = c("18030001"),
+                   huc8_name = c("Kern"))
 
-sub_dat <- "https://data.cityofnewyork.us/api/geospatial/3qz8-muuu?method=export&format=GeoJSON"
+# get just boundary
+huc8_sf <- nhdplusTools::get_huc(id = huc8_df$huc8_id, type="huc08") |> 
+  st_transform(3310)
 
-rat_df <- read_csv(rat_dat) |> clean_names()
-sub_sf <- st_read(sub_dat)
+# get flowlines function
+fetch_flowlines <- function(huc8){
+  huc8_poly <- nhdplusTools::get_huc(id = huc8, type="huc08")
+  huc8_flines <- nhdplusTools::get_nhdplus(AOI = huc8_poly, realization = 'flowline')
+  if(length(huc8_flines$comid) < 1){
+    stop(huc8, ' has failed to download flowlines. Try fetch_flowlines() again.')
+  }
+  # Find reach identifier (i.e., comid) at huc8 outlet
+  outlet_comid <- huc8_flines$comid[which.max(huc8_flines$totdasqkm)]
 
-# filter out to XY data
-rat_sf <- rat_df |> 
-  filter(!is.na(latitude)) |>
-  st_as_sf(coords=c("longitude","latitude"), remove=FALSE, crs=4326) |>
-  mutate(date = mdy_hms(created_date),
-         year = year(date)) |> 
-  relocate(date, year, .before = agency)
+  # include all comids upstream of outlet_comid within the huc8 boundaries
+  network_comids <- nhdplusTools::get_UT(huc8_flines, comid = outlet_comid, distance = 50000)
+  network <- huc8_flines |> 
+    filter(comid %in% network_comids) |>  
+    filter(streamorde == streamcalc) |> 
+    mutate(huc8_id = huc8)
 
-# crop to just the areas in NYC selected counties
-rat_sf_sel <- rat_sf[nyc_counties,]
+  # check that flowlines were returned by nhdplusTools; if not, stop.
+  if(length(network$comid) < 1){
+    stop(huc8, ' has failed to download flowlines. Try fetch_flowlines() again.')
+  } 
+  return(network)
+}
+# get flowlines
+kern <- fetch_flowlines(huc8=huc8_df$huc8_id)
 
-# filter to recent years
-rat_sf_sel <- rat_sf_sel |> 
-  filter(year > 2015)
-#table(rat_sf_sel$year)
+# plot
+plot(kern$geometry, lwd=kern$streamorde/6, col="blue4")
+plot(st_transform(huc8_sf$geometry, 4326), add=T, border="steelblue2", lwd=2)
 
-# get osm data
-library(osmdata)
-osm_prim <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("primary")) |> 
-  osmdata_sf()
+# save
+#save(kern, huc8_sf, file = "data_raw/day20_kern_flowdata.rda")
+#load("data_raw/day20_kern_flowdata.rda")
 
-osm_secondary <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("secondary")) |> 
-  osmdata_sf()
-
-osm_tert <- getbb("New York City") |> 
-  opq() |> 
-  add_osm_feature(key = "highway", 
-                  value = c("tertiary")) |> 
-  osmdata_sf()
+# get elev (12 takes a min)
+kern_elev <- elevatr::get_aws_terrain(huc8_sf, 11, prj = 3310)
+terra::plot(kern_elev)
+crs(kern_elev)
 
 # crop
-osm_prim_crop <- osm_prim$osm_lines[nyc_counties,]
-osm_scnd_crop <- osm_secondary$osm_lines[nyc_counties,]
-osm_tert_crop <- osm_tert$osm_lines[nyc_counties,]
+kern_e_crop <- terra::crop(kern_elev, vect(huc8_sf), mask=TRUE)
+terra::plot(kern_e_crop, col=viridis::mako(256))
 
-# quickplot
-plot(osm_tert_crop$geometry, col="red4", lwd=0.4)
-plot(osm_scnd_crop$geometry, col="gray", lwd=0.5, add=TRUE)
-plot(osm_prim_crop$geometry, col="orange", lwd=1, add=TRUE)
+# Get Aspect and TRI ------------------------------------------------------
 
+# calc aspect
+rast_tri <- terra::terrain(kern_e_crop, "TRI", neighbors=8)
+rast_asp <- terra::terrain(kern_e_crop, "aspect", neighbors=8)
+terra::plot(rast_tri, col=viridis::magma(256))
+terra::plot(rast_asp, col=viridis::magma(256))
 
+# tmap
+library(tmap)
+tm_shape(kern_e_crop, raster.downsample = TRUE) + 
+  tm_raster(legend.show = FALSE, alpha = .8) +
+  tm_shape(rast_tri, raster.downsample = TRUE) + 
+  tm_raster(palette = "viridis", legend.show = FALSE, alpha = .6) +
+  tm_compass(size = 1) + tm_scale_bar() 
 
-# plot density
-ggplot() +
-  geom_sf(data = nyc_counties) +
-  #geom_sf(data = osm_scnd_crop, color=alpha("gray50",0.5), lwd=0.25)+
-  #geom_sf(data = osm_prim_crop, color=alpha("gray30",0.7), lwd=0.5)+
-    geom_sf(data=sub_sf,col=alpha("gray50", 0.5), lwd=0.8, lty=2, 
-          show.legend = FALSE)+
-  stat_density2d(data=rat_sf_sel, aes(x=longitude, y=latitude, fill = after_stat(level)), n=200, alpha = .85, geom = "polygon", show.legend = FALSE) + 
-  scale_fill_viridis_c() +
-  # ggrepel::geom_label_repel(data=nyc_counties, aes(label=NAME, geometry=geometry), 
-  #                  stat = "sf_coordinates", size=3.7,
-  #                  force_pull = 2,force = 2,
-  #                  min.segment.length = .1, 
-  #                  segment.color = "grey50") +
+# ggplot
+kern_utm <- st_transform(kern, st_crs(huc8_sf))
 
-  labs(title="Rats Near New York Subway Lines",x="", y="",
-       subtitle ="#30DayMapChallenge • Day-17 • Flow",
-       caption = "R. Peek • <https://data.cityofnewyork.us/Social-Services/Rat-Sightings/3q43-55fe>")+
-  ggthemes::theme_map(base_family = "Schoolbell") +
+# plot
+library(ggtext)
+library(tidyterra)
+
+#ggplot(as.data.frame(rast_tri, xy=TRUE)) + 
+#  geom_raster(aes(x=x, y=y, fill=TRI)) +
+gg_kern <- ggplot() + 
+  tidyterra::geom_spatraster(data=rast_tri, interpolate = TRUE)+
+  scale_fill_viridis_c("TRI",option = "turbo", na.value=NA, end = 0.9) +
+  geom_sf(data=kern, color="white", linewidth=kern$streamorde/8, show.legend = FALSE, alpha=0.5) +
+  geom_sf(data=huc8_sf, fill=NA, color="steelblue2")+
+  theme_ft_rc(base_family = "Roboto Slab", plot_title_size = 40, plot_margin = margin(15, 30, 4, 10))+
+  labs(x="", y="",
+       title = "Upper Kern Watershed: \nTerrain Ruggedness Index",
+       subtitle = "**TRI**: A measure of the absolute differences between<br>the value of a cell and its 8 surrounding cells. <br>__*#30DayMapChallenge • Day-20 • Outdoors*__",
+       caption="<https://github.com/ryanpeek/2023_30-day-map-challenge/>")+
+  coord_sf(label_axes = "")+
   theme(
-    plot.title = element_text(family = "Schoolbell", size=40),
-    strip.background = element_rect(fill="white", colour = NA),
-    strip.text = element_text(color="black", face="bold", size=20),
-    plot.subtitle = element_text(family = "Schoolbell", size=32),
-    plot.caption = element_text(family = "Roboto Slab", size=16)) +
-  facet_wrap(.~year, nrow = 2)
+    plot.title = element_text(lineheight = 0.5),
+    plot.subtitle = element_markdown(color="gray80", size = 24,lineheight = 0.7),
+    plot.caption = element_text(color="gray80",size = 18, hjust = 0),
+    legend.text = element_text(color="gray80"),
+    legend.title = element_text(color="gray80", face = "bold"),
+    plot.background = element_rect("#252a32"),
+    panel.grid.major = element_blank(),
+    legend.position = "right")
+
+gg_kern
+ggsave("figs/day20-outdoors.png", width=5, height=7, dpi=300,
+       bg="black")
+
+# NOPE
+# # now try rayshader
+# library(rayshader)
+# rayshade_matrix <- raster_to_matrix(kern_e_crop)
+# 
+# # set window height and width based on object size
+# w <- nrow(rayshade_matrix)
+# h <- ncol(rayshade_matrix)
+# 
+# # scale the dimensions to use as multipliers
+# wr <- w / max(c(w,h))
+# hr <- h / max(c(w,h))
+# 
+# # limit ratio so that the shorter side is at least .7 of longer side
+# if (min(c(wr, hr)) < .80) {
+#   if (wr < .80) {
+#     wr <- .80
+#   } else {
+#     hr <- .80
+#   }
+# }
+# 
+# # plot!
+# rayshade_matrix |> 
+#   height_shade(texture = viridis::turbo(256))  |> 
+#   plot_3d(heightmap = rayshade_matrix,
+#           zscale = 100,
+#           solid = FALSE,
+#           windowsize = c(900*wr, 900*hr))
+# 
+# render_camera(theta = 40, shift_vertical = 5,
+#               phi = 30, 
+#               zoom = 0.7)
+# 
+# # make dir
+# outfile <- "figs/day20-geo_raster.png"
+# 
+# png::writePNG(matrix(1), target = outfile)
+#   
+# render_highquality(outfile,
+#                width = 900*wr,
+#                height = 900*hr,
+#                interactive = FALSE,
+#                lightaltitude = 30,
+#                lightintensity = 700,
+#                samples = 5000) # higher number increases size, may induce hang in rendering
+
+
 
 ggsave("figs/day17-flow-rats.png", width=7, height=5, dpi=300,
        bg="white")
