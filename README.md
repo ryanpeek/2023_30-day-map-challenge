@@ -139,3 +139,9 @@ Outdoors. One of the coolest geologic/glacial features in the Sierras is the Ker
 North is Not Up! Or also, rivers don't always flow south (or west) in CA. 
 
 ![](figs/day22-north-not-up.png)
+
+### Day-24
+
+Black and White: as light pollution.
+
+![](figs/day24-black-white-marble.png)
