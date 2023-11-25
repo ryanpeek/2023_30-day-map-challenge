@@ -146,6 +146,12 @@ North is Not Up! Or also, rivers don't always flow south (or west) in CA.
 
 ![](figs/day22-north-not-up.png)
 
+### Day-23
+
+3D: Forest Canopy Height (see here: https://langnico.github.io/globalcanopyheight/) for Emigrant Wilderness.
+
+![](figs/day23-3d-titled.jpg)
+
 ### Day-24
 
 Black and White: as light pollution.
