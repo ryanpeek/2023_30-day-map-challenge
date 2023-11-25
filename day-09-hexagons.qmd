@@ -336,9 +336,6 @@ my_img
 
 image_info(my_img)  
 
-#my_image <-  png::readPNG("figs/day09-hexagons_3d.png")
-#gall <- g1 + grid::rasterGrob(my_image) 
-
 # alt
 my_image <-  png::readPNG("temp/titled.png")
 library(cropcircles)
@@ -359,6 +356,22 @@ gall
 
 ggsave(filename = glue("figs/day09_hexagons_3d.png"), width = 11, height = 8.5, dpi = 300)
 
+
+
+
+
+gall <- g1 + grid::rasterGrob(circ_image) + 
+  theme(plot.background = element_rect(fill = "#252a32", 
+                                       colour = "#252a32"))
+gall
+ggsave(filename = glue("figs/day09_hexagons_3d_circle_v1.png"), width = 11, height = 8.5, dpi = 300)
+
+
+# inset
+ginset <- g1 + patchwork::inset_element(grid::rasterGrob(my_img), 0.7, 0.2, 1, 1, clip = FALSE) & theme(plot.background = element_rect(fill = "#252a32", colour = "#252a32"))
+gall
+
+ggsave(filename = glue("figs/day09_hexagons_3d.png"), width = 11, height = 8.5, dpi = 300)
 
 
 ```

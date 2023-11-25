@@ -134,6 +134,12 @@ Outdoors. One of the coolest geologic/glacial features in the Sierras is the Ker
 
 ![](figs/day20-outdoors.png)
 
+### Day-21
+
+Auburn State Park (Recreational Area). Deep canyons and great places to hike. Used {rayshader} and {elevatr} here.
+
+![](figs/day21-raster-3d-titled.png)
+
 ### Day-22
 
 North is Not Up! Or also, rivers don't always flow south (or west) in CA. 

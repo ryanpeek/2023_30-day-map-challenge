@@ -21,7 +21,7 @@ editor_options:
 
 ## Raster
 
-Cool 3d map of terrain (see knoxville?)
+Cool 3d map of terrain
 
 ## Data
 
@@ -43,7 +43,7 @@ library(tigris)
 options(tigris_use_cache = TRUE)
 library(colorspace)
 library(showtext)
-font_add_google("Schoolbell")
+font_add_google("Bebas Neue")
 font_add_google("Roboto Slab")
 showtext_auto()
 
@@ -67,40 +67,166 @@ aub <- park_b |> filter(grepl("Auburn", UNITNAME)) |>
 elev <- get_elev_raster(aub, z = 13)
 
 # now mask and crop
-rast_crop_e <- elev  |> 
-  crop(aub, mask=TRUE) |> terra::rast()
+rast_crop_e <- terra::crop(elev, aub, mask=TRUE, extend=TRUE) |> terra::rast()
 rast_crop_e
-#plot(rast_crop_e)
-#title("30m DEM elevatr")
+plot(rast_crop_e, col=viridis::magma(124))
+plot(aub$SHAPE, add=TRUE, border="gray", col=NA)
 
-library(tmap)
+# make a caption map ---------
 
-tm_shape(rast_crop_e, raster.downsample = FALSE) + tm_raster(palette = "viridis", legend.show = FALSE) +
-  tm_compass(size = 1) + tm_scale_bar() 
+# get an area to crop by
+ca <- tigris::states() |> filter(STUSPS=="CA")
+cnty <- tigris::counties(state="CA")
+
+# make a map 
+ggplot() + 
+  geom_sf(data=cnty, fill=NA, color="gray20", lwd=0.2)+
+  geom_sf(data=ca, fill=NA, color="gray40", lwd=1) +
+  geom_sf(data=st_centroid(aub$SHAPE), pch=21, fill="orange", size=6)+
+  theme_void()
+ggsave(filename="figs/day21-raster-inset-map.png", width = 3, height = 4, dpi=300)
+
 
 # Get Aspect and TRI ------------------------------------------------------
 
 # calc aspect
 rast_tri <- terra::terrain(rast_crop_e, "TRI", neighbors=8)
 rast_asp <- terra::terrain(rast_crop_e, "aspect", neighbors=8)
-
-tm_shape(rast_tri, raster.downsample = FALSE) + 
-  tm_raster(palette = "viridis", legend.show = FALSE) +
-  tm_compass(size = 1) + tm_scale_bar() 
-
-tm_shape(rast_asp, raster.downsample = TRUE) + 
-  tm_raster(palette = "viridis", legend.show = FALSE) +
-  tm_compass(size = 1) + tm_scale_bar() 
+rast_slope <- terra::terrain(rast_crop_e, "slope")
 
 # ggplot plot
-ggplot(as.data.frame(rast_tri, xy=T)) + 
-  geom_raster(aes(x=x, y=y, fill=TRI)) +
-  scale_fill_viridis_c("TRI",option = "turbo", na.value=NA) +
-  theme_void(base_family = "Atkinson Hyperlegible")+
-  theme(legend.position = "right",
-        legend.text = element_text(color="white")) +
-  labs(x="", y="")
+library(tidyterra)
+ggplot() + 
+  geom_spatraster(data=rast_slope) +
+  scale_fill_viridis_c("Slope", option = "G", na.value=NA) +
+  theme_ft_rc(base_family = "Bebas Neue", axis = FALSE, grid = FALSE)+
+  labs(x="", y="", title="Auburn State Park")
 
-ggsave("figs/day21-raster-tri.png", width=7, height=5, dpi=300,
-       bg="black")
+#ggsave("figs/day21-raster-tri.png", width=7, height=5, dpi=300,
+#       bg="black")
+
+# now try rayshader
+library(rayshader)
+rayshade_matrix <- raster_to_matrix(rast_crop_e)
+
+# set window height and width based on object size
+w <- nrow(rayshade_matrix)
+h <- ncol(rayshade_matrix)
+
+# scale the dimensions to use as multipliers
+wr <- w / max(c(w,h))
+hr <- h / max(c(w,h))
+
+# limit ratio so that the shorter side is at least .7 of longer side
+if (min(c(wr, hr)) < .80) {
+  if (wr < .80) {
+    wr <- .80
+  } else {
+    hr <- .80
+  }
+}
+
+# try this:
+pal <- "hiroshige"
+colors <- MetBrewer::met.brewer("Hiroshige", 256, direction = -1)
+swatchplot(colors)
+#colors <- viridis::mako(256)
+#swatchplot(colors)
+#texture <- grDevices::colorRampPalette(colors[140])(256)
+#swatchplot(texture)
+size <- 4000 # was 8000
+
+# render test plot
+try(rgl::close3d())
+
+# Create the initial 3D object
+rayshade_matrix |>
+  height_shade(texture = colors) |> 
+  plot_3d(heightmap = rayshade_matrix,
+          solid = FALSE,
+          soliddepth = 0,
+          # lower values exaggerate the height
+          zscale = 10,
+          #z = 0.5 / (size / 1000),
+          shadowdepth = 100,
+          windowsize = c(900*wr,900*hr),
+          phi = 90,
+          zoom = 0.8,
+          theta = 0,
+          background = "#252a32")
+
+# Use this to adjust the view after building the window object
+render_camera(phi = 40, fov=40, theta = 40,
+              shift_vertical = 5, zoom = 0.9)
+
+# make dir
+outfile <- "figs/day21-raster-3d.png"
+
+png::writePNG(matrix(1), target = outfile)
+
+render_highquality(outfile,
+                   parallel=TRUE,
+                   environment_light = "data_raw/phalzer_forest_01_4k.hdr",
+                   intensity_env = 1.5,
+                   # can rotate to have light come from SSW by 
+                   # rotate_env = 180
+                   width = 900*wr,
+                   height = 900*hr,
+                   interactive = FALSE,
+                   light = FALSE,
+                   #lightaltitude = 30,
+                   #lightintensity = 700,
+                   samples = 1000) # higher number increases size
+
+
 ```
+
+To fix up and annotate an image, seems it's easiest to do so after you render to png.
+
+```{r}
+
+library(magick)
+library(glue)
+library(colorspace)
+library(MetBrewer)
+
+colors <- met.brewer("Hiroshige", 12)
+swatchplot(colors)
+text_color <- colors[12]
+swatchplot(text_color)
+caption_color <- "#252a32"
+
+## Read in Image ---------------
+img <- image_read("figs/day21-raster-3d.png")
+image_info(img)
+
+s <- darken("#9a9397", .1)
+shadow <- "#9a9397"
+inset <- image_read("figs/day21-raster-inset-map.png")
+
+## Add Stuff to Image and Write Out ------------------------------------------------------
+
+img |>
+  image_crop(geometry = "748x900+0+0", gravity = "center") |>
+  image_annotate(text = "Auburn State Recreational Area\n Elevation", 
+                 gravity = "north",
+                 location = "+10+150", font = "Bebas Neue",
+                 color = text_color, kerning = 2,
+                 size = 40, weight = 100) |> 
+  image_annotate(text = "Ryan Peek • <https://github.com/ryanpeek/2023_30-day-map-challenge/>", 
+                 gravity = "southwest",
+                 location = "+50+100", font = "Bebas Neue",
+                 color = caption_color, kerning = 1,
+                 size = 18, weight = 100) |>
+  image_annotate(text = "#30DayMapChallenge • Day-21 • Raster", 
+                 gravity = "southwest",
+                 location = "+50+140", font = "Bebas Neue",
+                 color = caption_color, kerning = 1,
+                 size = 20, weight = 100) |> 
+  image_composite(image_scale(inset, geometry = "20%x"),
+                   gravity = "southeast",
+                   offset = "+40+100") |>
+  image_write("figs/day21-raster-3d-titled.png")
+
+```
+
