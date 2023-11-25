@@ -38,78 +38,132 @@ library(janitor)
 library(glue)
 library(sf)
 library(terra)
+library(rayshader)
 library(elevatr)
+library(nhdplusTools)
 library(tigris)
 options(tigris_use_cache = TRUE)
 library(colorspace)
 library(showtext)
+library(rnaturalearth)
+#library(classInt)
+library(fs)
 font_add_google("Bebas Neue")
 font_add_google("Roboto Slab")
 showtext_auto()
 
 
-# Get Elev: elevatr ---------------------------------------------------
-# elevatr zoom levels roughly
-# 11=30m, 12=15m, 13=7m
+# global canopy height:
+# https://nlang.users.earthengine.app/view/global-canopy-height-2020
+# data (see tile_index.html): https://libdrive.ethz.ch/index.php/s/cO8or7iOe5dT2Rt#editor
 
-# get park boundaries here: https://www.parks.ca.gov/?page_id=29682
-# https://opendata.arcgis.com/datasets/0fea4fa1db734794bdb3b5410bb3eed9_0.gdb?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D
-st_layers("data_raw/stateParkBoundaries.gdb")
-park_b <- st_read("data_raw/stateParkBoundaries.gdb/", "ParkBoundaries") |> st_make_valid()
+# for southern sierra/yosemite:
+#	https://libdrive.ethz.ch/index.php/s/cO8or7iOe5dT2Rt/download?path=%2F3deg_cogs&files=ETH_GlobalCanopyHeight_10m_2020_N36W120_Map.tif
+# https://libdrive.ethz.ch/index.php/s/cO8or7iOe5dT2Rt/download?path=%2F3deg_cogs&files=ETH_GlobalCanopyHeight_10m_2020_N36W120_Map_SD.tif
 
-# filter to auburn rec
-aub <- park_b |> filter(grepl("Auburn", UNITNAME)) |> 
-  st_transform(3310)
-# plot(aub$SHAPE)
-# st_crs(aub)
+#CA is N33W123, N33W120, N33W117, N36W123, N36W120, N36W117, N39W123, N39W126, N36W126
 
-# get the data!
-elev <- get_elev_raster(aub, z = 13)
+# get forest canopy height
+urls <- c("https://libdrive.ethz.ch/index.php/s/cO8or7iOe5dT2Rt/download?path=%2F3deg_cogs&files=ETH_GlobalCanopyHeight_10m_2020_N36W120_Map.tif")
 
-# now mask and crop
-rast_crop_e <- terra::crop(elev, aub, mask=TRUE, extend=TRUE) |> terra::rast()
-rast_crop_e
-plot(rast_crop_e, col=viridis::magma(124))
-plot(aub$SHAPE, add=TRUE, border="gray", col=NA)
+# can write a loop or purrr here for multiple
+if(!file.exists("data_raw/GlobalCanopyHeight_10m_2020_N36W120_Map.tif")){
+  download.file(urls, destfile = glue("data_raw/{basename(gsub('.*ETH_','', urls))}"), mode = "wb")
+}
 
-# make a caption map ---------
+# it's big! >200MB
 
-# get an area to crop by
-ca <- tigris::states() |> filter(STUSPS=="CA")
-cnty <- tigris::counties(state="CA")
+# get park boundary for YNP/Emigrant
+library(osmdata)
+ynp_bb <- getbb("Yosemite National Park")
+ynp_bb
+ynp_boundary <- ynp_bb |> opq() |> 
+  # try admin or area?
+  add_osm_feature(key = "boundary") |> 
+  osmdata_sf()
+# see available_tags or available_features
+emig <- ynp_boundary$osm_multipolygons |> filter(grepl("Emigrant", name))
 
-# make a map 
-ggplot() + 
-  geom_sf(data=cnty, fill=NA, color="gray20", lwd=0.2)+
-  geom_sf(data=ca, fill=NA, color="gray40", lwd=1) +
-  geom_sf(data=st_centroid(aub$SHAPE), pch=21, fill="orange", size=6)+
-  theme_void()
-ggsave(filename="figs/day21-raster-inset-map.png", width = 3, height = 4, dpi=300)
+# get rivs
+# emig_rivs <- opq(bbox = sf::st_bbox(emig)) |> 
+#   add_osm_feature(key = "waterway") %>%
+#   osmdata_sf()
 
+# plot
+#plot(emig$geometry)
+#plot(emig_rivs$osm_lines$geometry, col="blue", lwd=0.3, add=TRUE)
 
-# Get Aspect and TRI ------------------------------------------------------
+# load forest height and crop
+rast_fh <- terra::rast("data_raw/GlobalCanopyHeight_10m_2020_N36W120_Map.tif") |> 
+  terra::crop(emig, snap = "in", mask = TRUE)
+# use mosaic if using a bunch of rast
 
-# calc aspect
-rast_tri <- terra::terrain(rast_crop_e, "TRI", neighbors=8)
-rast_asp <- terra::terrain(rast_crop_e, "aspect", neighbors=8)
-rast_slope <- terra::terrain(rast_crop_e, "slope")
+# now agg 
+rast_fh_emig <- rast_fh |> terra::aggregate(fact = 4)
+plot(rast_fh_emig)
+#plot(rast_fh)
 
-# ggplot plot
-library(tidyterra)
-ggplot() + 
-  geom_spatraster(data=rast_slope) +
-  scale_fill_viridis_c("Slope", option = "G", na.value=NA) +
-  theme_ft_rc(base_family = "Bebas Neue", axis = FALSE, grid = FALSE)+
-  labs(x="", y="", title="Auburn State Park")
+# convert to dataframe
+fh_df <- as.data.frame(rast_fh_emig, xy = TRUE)
+glimpse(fh_df) # 380k pixels
+fh_df_full <- as.data.frame(rast_fh, xy = TRUE)
+names(fh_df_full)[3] <- "height_m"
+#glimpse(fh_df_full) # 6 million pixels (BIG)
 
-#ggsave("figs/day21-raster-tri.png", width=7, height=5, dpi=300,
-#       bg="black")
+# change value to height
+names(fh_df)[3] <- "height_m"
 
-# now try rayshader
-library(rayshader)
-rayshade_matrix <- raster_to_matrix(rast_crop_e)
+# fix breaks so more even?
+fh_breaks <- classInt::classIntervals(fh_df$height_m, n = 5, style = "pretty")$brks
 
-# set window height and width based on object size
+# make a col palette
+colors <- sequential_hcl(5, palette = "Terrain 2", rev = TRUE)
+swatchplot(colors)
+
+texture <- colorRampPalette(colors, bias = 2)(6)
+swatchplot(texture)
+
+# plot
+p <- ggplot(data = fh_df) +
+  geom_raster(aes(x = x, y = y, fill = height_m)) +
+  scale_fill_gradientn(
+    name = "height (m)",
+    colors = texture,
+    breaks = round(fh_breaks, 0)) +
+  coord_sf(crs = 4326) +
+  guides(fill = guide_legend(
+    direction = "vertical",
+    keyheight = unit(5, "mm"),
+    keywidth = unit(5, "mm"),
+    title.position = "top", title.hjust = .5,
+    label.position = "right", label.hjust = .5,
+    ncol = 1, byrow = F)
+  ) +
+  theme_void(base_family = "Bebas Neue") +
+  labs()+#title="Forest Canopy of Emigrant Wilderness") +
+  theme(
+    title = element_text(size=40),
+    axis.line = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 18, color = "grey10"),
+    legend.text = element_text(size = 16, color = "grey10"),
+    #panel.grid.major = element_line(color = "white"),
+    #panel.grid.minor = element_line(color = "white"),
+    #plot.background = element_rect(fill = "white", color = NA),
+    #legend.background = element_rect(fill = "white", color = NA),
+    #panel.border = element_rect(fill = NA, color = "white"),
+    plot.margin = unit(c(t = 2, r = 0, b = 0, l = 0), "lines"))
+
+p
+
+#ggsave(p, filename = "figs/day23-3d-ggplot_hi.png", width = 6, height = 6, dpi=300)
+ggsave(p, filename = "figs/day23-3d-ggplot.png", width = 6, height = 6, dpi=300)
+
+# # set window height and width based on object size
 w <- nrow(rayshade_matrix)
 h <- ncol(rayshade_matrix)
 
@@ -126,107 +180,99 @@ if (min(c(wr, hr)) < .80) {
   }
 }
 
-# try this:
-pal <- "hiroshige"
-colors <- MetBrewer::met.brewer("Hiroshige", 256, direction = -1)
-swatchplot(colors)
-#colors <- viridis::mako(256)
-#swatchplot(colors)
-#texture <- grDevices::colorRampPalette(colors[140])(256)
-#swatchplot(texture)
-size <- 4000 # was 8000
 
-# render test plot
-try(rgl::close3d())
+# render ggplot
+rayshader::plot_gg(
+    ggobj = p,
+    width = 4,
+    height = 3.7,
+    scale = 150,
+    solid = F,
+    soliddepth = 0,
+    shadow = TRUE,
+    shadow_intensity = .99,
+    offset_edges = F,
+    sunangle = 315,
+    windowsize = c(900*wr,900*hr),
+    #window.size = c(800, 800),
+    zoom = .4,
+    phi = 30,
+    theta = -30,
+    multicore = T
+)
 
-# Create the initial 3D object
-rayshade_matrix |>
-  height_shade(texture = colors) |> 
-  plot_3d(heightmap = rayshade_matrix,
-          solid = FALSE,
-          soliddepth = 0,
-          # lower values exaggerate the height
-          zscale = 10,
-          #z = 0.5 / (size / 1000),
-          shadowdepth = 100,
-          windowsize = c(900*wr,900*hr),
-          phi = 90,
-          zoom = 0.8,
-          theta = 0,
-          background = "#252a32")
+render_camera(phi = 45, fov=40, theta = 10,
+              shift_vertical = 5, zoom = 0.7)
 
-# Use this to adjust the view after building the window object
-render_camera(phi = 40, fov=40, theta = 40,
-              shift_vertical = 5, zoom = 0.9)
 
-# make dir
-outfile <- "figs/day21-raster-3d.png"
-
-png::writePNG(matrix(1), target = outfile)
-
-render_highquality(outfile,
-                   parallel=TRUE,
-                   environment_light = "data_raw/phalzer_forest_01_4k.hdr",
-                   intensity_env = 1.5,
-                   # can rotate to have light come from SSW by 
-                   # rotate_env = 180
-                   width = 900*wr,
-                   height = 900*hr,
-                   interactive = FALSE,
-                   light = FALSE,
-                   #lightaltitude = 30,
-                   #lightintensity = 700,
-                   samples = 1000) # higher number increases size
-
+# render high
+rayshader::render_highquality(
+    filename = "figs/day23-3d-render.png",
+    preview = FALSE,
+    interactive = FALSE,
+    light = TRUE,
+    lightdirection = c(315, 310, 315, 310),
+    lightintensity = c(1000, 1500, 150, 100),
+    lightaltitude = c(15, 15, 80, 80),
+    ground_material = rayrender::microfacet(roughness = .6),
+    #width = 4000,
+    #height = 4000
+    width = 900*wr,
+    height = 900*hr
+)
 
 ```
 
-To fix up and annotate an image, seems it's easiest to do so after you render to png.
 
 ```{r}
+#| label: rayshade
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
 
 library(magick)
 library(glue)
 library(colorspace)
 library(MetBrewer)
 
-colors <- met.brewer("Hiroshige", 12)
+colors <- sequential_hcl(12, palette = "Terrain 2", rev = TRUE)
 swatchplot(colors)
 text_color <- colors[12]
 swatchplot(text_color)
 caption_color <- "#252a32"
 
 ## Read in Image ---------------
-img <- image_read("figs/day21-raster-3d.png")
+img <- image_read("figs/day23-3d-render.png")
 image_info(img)
 
 s <- darken("#9a9397", .1)
 shadow <- "#9a9397"
-inset <- image_read("figs/day21-raster-inset-map.png")
+inset <- image_read("figs/day23-3d-ggplot.png")
 
 ## Add Stuff to Image and Write Out ------------------------------------------------------
 
 img |>
-  image_crop(geometry = "748x900+0+0", gravity = "center") |>
-  image_annotate(text = "Auburn State Recreational Area\n Elevation", 
+  image_crop(geometry = "3800x38000+50+50", gravity = "center") |>
+  image_annotate(text = "Forest Canopy of Emigrant Wilderness", 
                  gravity = "north",
-                 location = "+10+150", font = "Bebas Neue",
-                 color = text_color, kerning = 2,
-                 size = 40, weight = 100) |> 
-  image_annotate(text = "Ryan Peek • <https://github.com/ryanpeek/2023_30-day-map-challenge/>", 
-                 gravity = "southwest",
-                 location = "+50+100", font = "Bebas Neue",
+                 location = "-300+200", font = "Bebas Neue",
+                 color = caption_color, kerning = 2,
+                 size = 200, weight = 200) |>
+  image_composite(image_scale(inset, geometry = "70%x"),
+                  gravity = "northeast",
+                  offset = "+10+200") |>
+  image_annotate(text = "#30DayMapChallenge • Day-23 • 3d", 
+                 gravity = "northwest",
+                 location = "+300+600", font = "Bebas Neue",
                  color = caption_color, kerning = 1,
-                 size = 18, weight = 100) |>
-  image_annotate(text = "#30DayMapChallenge • Day-21 • Raster", 
-                 gravity = "southwest",
-                 location = "+50+140", font = "Bebas Neue",
+                 size = 100, weight = 100) |> 
+  image_annotate(text = "Ryan Peek • Data: <https://langnico.github.io/globalcanopyheight/>", 
+                 gravity = "northwest",
+                 location = "+300+800", font = "Bebas Neue",
                  color = caption_color, kerning = 1,
-                 size = 20, weight = 100) |> 
-  image_composite(image_scale(inset, geometry = "20%x"),
-                   gravity = "southeast",
-                   offset = "+40+100") |>
-  image_write("figs/day21-raster-3d-titled.png")
+                 size = 80, weight = 50) |>
+  image_write("figs/day23-3d-titled.png")
 
 ```
 
