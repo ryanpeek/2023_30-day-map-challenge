@@ -160,4 +160,6 @@ Black and White: as light pollution.
 
 ### Day-25
 
-Antarctica
+Antarctica. Location of the {palmerpenguins} data set, as gleaned from the original paper. And with art from Allison Horst!
+
+![](figs/day25-antarctica-final.png)
