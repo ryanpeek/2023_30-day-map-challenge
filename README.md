@@ -157,3 +157,7 @@ North is Not Up! Or also, rivers don't always flow south (or west) in CA.
 Black and White: as light pollution.
 
 ![](figs/day24-black-white-marble.png)
+
+### Day-25
+
+Antarctica

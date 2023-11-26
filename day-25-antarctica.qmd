@@ -1,0 +1,186 @@
+---
+title: '2023 30-day Map Challenge • Day 25 • Antarctica'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Antarctica
+
+https://github.com/SCAR/RAATD
+
+
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+library(hrbrthemes)
+library(janitor)
+library(glue)
+library(sf)
+library(terra)
+library(rnaturalearth)
+library(colorspace)
+library(showtext)
+font_add_google("Bebas Neue")
+font_add_google("Roboto Slab")
+showtext_auto()
+
+#rnmu10 <- rnaturalearthhires::states10 |> as("sf")
+
+# PENGUINS: https://allisonhorst.github.io/palmerpenguins/
+library(palmerpenguins)
+df <- penguins_raw
+glimpse(df)
+table(df$Island)
+table(df$Region)
+
+# https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0090081
+pts_sf <- tibble(x=c(-64.07418,-63.78453,-64.22502), y=c(-64.77289,-64.81181,-64.72544),
+                 name=c("Torgersen", "Biscoe", "Dream")) |> 
+  st_as_sf(coords=c("x","y"), remove=FALSE, crs=4326) |> 
+  st_transform(3031)
+
+# glaciers of antarctica https://geodata.lib.berkeley.edu/catalog/stanford-gg131xy9972
+#aglac <- st_read("data_raw/ANTARCTICA/glaciers/19_rgi50_AntarcticSubantarctic.shp") |> 
+aglac <- st_read("data_raw/ANTARCTICA/glaciers_stanford-gg131xy9972-geojson.json") |> 
+  st_transform(3031) |> st_make_valid()
+
+# coastline and basins: https://nsidc.org/data/nsidc-0709/versions/2
+abasins <- st_read("data_raw/ANTARCTICA/Basins_Antarctica_v02.shp")
+aground <- st_read("data_raw/ANTARCTICA/GroundingLine_Antarctica_v02.shp")
+acoast <- st_read("data_raw/ANTARCTICA/Coastline_Antarctica_v02.shp")
+
+plot(aground$geometry, col="black")
+plot(abasins, border="orange", col=alpha("orange", 0.9), add=TRUE)
+plot(acoast$geometry, add=TRUE, border="blue")
+plot(aglac$geometry, col=alpha("blue", 0.8), border="blue", add=TRUE)
+
+# crop data
+penguin_bb <- st_bbox(pts_sf) |> st_as_sfc() |> st_as_sf() |> st_buffer(dist = 2e5,endCapStyle = "SQUARE", joinStyle = "MITRE")
+
+# mask?
+antmask <- terra::rast("data_raw/ANTARCTICA/Mask_Antarctica_v02.tif")
+cat(crs(antmask))
+plot(antmask)
+plot(aground$geometry, add=TRUE, border="black")
+plot(abasins$geometry, border="steelblue", col=alpha("steelblue", 0.8), add=TRUE)
+plot(aglac$geometry, col=alpha("cyan4", 0.4), border="cyan4", add=TRUE)
+plot(pts_sf$geometry, col="orange", pch=16, add=TRUE)
+plot(penguin_bb, border="white", add=TRUE)
+
+# crop antmask
+antmask_crop <- terra::crop(antmask, penguin_bb)
+plot(antmask_crop)
+plot(penguin_bb, border="white", add=TRUE)
+plot(aground$geometry, add=TRUE, border="black")
+plot(abasins$geometry, border="steelblue", col=alpha("steelblue", 0.8), add=TRUE)
+plot(aglac$geometry, col=alpha("cyan4", 0.4), border="cyan4", add=TRUE)
+plot(pts_sf$geometry, col="orange", pch=16, add=TRUE)
+
+
+```
+
+
+```{r}
+# now a ggplot version
+(g_big <- ggplot() + 
+   geom_sf(data=aground, fill="black") +
+   geom_sf(data=abasins, fill=alpha("steelblue", 0.8), col="steelblue2", lwd=0.2) +
+   geom_sf(data=aglac, fill=alpha("cyan4", 0.8), col="cyan4") +
+   geom_sf(data=penguin_bb, fill=NA, col="gray30", lwd=1) + 
+   geom_sf(data=pts_sf, fill="orange", pch=21, size=4) +
+   theme_minimal()+
+   theme(panel.grid = element_line(color=alpha("gray30",0.2))))
+
+ggsave(g_big, filename="figs/day25-antarctica-bigmap.png", bg="white", width=6, height = 6, dpi=300)
+
+# now crop for inset later
+library(cropcircles)
+gg_circle <- circle_crop("figs/day25-antarctica-bigmap.png", "figs/day25-antarctica-bigmap-circle.png", border_size = 10, border_colour = "black")
+
+# now a zoomed version
+(g_zoom <- ggplot() + 
+    geom_sf(data=penguin_bb, fill=NA, col="gray30", lwd=1) + 
+    geom_sf(data=abasins, fill=alpha("steelblue", 0.8), col="steelblue2", lwd=0.2) +
+    geom_sf(data=aglac, fill=alpha("cyan4", 0.8), col="cyan4") +
+    geom_sf(data=pts_sf, fill="orange", pch=21, size=4.5) +
+    ggrepel::geom_label_repel(data=pts_sf, aes(label=name, geometry=geometry), 
+                           stat = "sf_coordinates", 
+                           force_pull = 1.5, force = 3.5, nudge_x = -80, nudge_y = 30,
+                           min.segment.length = .2, size=12, segment.color="gray50",
+                           color="black")+
+    theme_minimal()+
+    ggspatial::annotation_north_arrow() +
+    labs(
+      x = NULL, y = NULL,
+      title = "Antarctica: Palmer Penguins Data!",
+      subtitle = "#30DayMapChallenge • Day-25 • Antarctica",
+      caption = "CRS: 3031\n Data:  <https://nsidc.org/data/nsidc-0709/versions/2> \n and <https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0090081>",
+    ) +
+    hrbrthemes::theme_ipsum_rc(grid="") +
+    coord_sf(xlim = c(-2712202, -2293977), ylim = c(1013093, 1428025))+
+    theme(panel.grid = element_line(color=alpha("gray30",0.8)),
+          axis.text = element_text(family ="Roboto Slab", size=40),
+          plot.title = element_text(family = "Bebas Neue", size = 60),
+          plot.subtitle = element_text(family = "Roboto Slab", size=54),
+          plot.caption = element_text(family = "Roboto Condensed", size=40,
+                                      hjust = 0, lineheight = 0.5)))
+
+# save
+ggsave(g_zoom, filename="figs/day25-antarctica-zoom.png", width=8, height = 10, dpi=300, bg="white")
+
+# a text box:
+# add a text box
+df_text_box <- tibble(
+  x=0, y=0,
+  label = "<b style='color:#000080;'> {palmerpenguins}</b> artwork by @allison_horst")
+
+# text box
+gtxt <- ggplot() +
+  ggtext::geom_textbox(data=df_text_box, aes(x = x, y = y, label=label),
+    box.color = NA, width = unit(8, "lines"),
+    family = "Roboto Slab", 
+    color = "grey30", size = 7, lineheight = 1.2) +
+  coord_cartesian(expand = FALSE, clip = "off") +
+  theme_void()
+
+gtxt
+# now try putting it all together
+gg_circ_img <-  png::readPNG("figs/day25-antarctica-bigmap-circle.png")
+pengs <- png::readPNG("images/ahorst_lter_penguins.png")
+
+
+# inset
+ginset <- g_zoom + 
+  inset_element(grid::rasterGrob(gg_circ_img), 1, 0.7, 1.4, 1, on_top = TRUE, clip = FALSE) + 
+  inset_element(grid::rasterGrob(pengs), 1, 0.3, 1.4, 0.7, on_top = TRUE, clip = FALSE) +
+  inset_element(gtxt, 1.1, 0.1, 1.5, 0.5, on_top = TRUE, clip = TRUE)
+ginset
+
+ggsave(ginset, filename = glue("figs/day25-antarctica-final.png"), width = 11, height = 8, dpi = 300, bg="white")
+
+
+```
+

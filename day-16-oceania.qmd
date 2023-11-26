@@ -86,9 +86,6 @@ nrow(oceania_crop) # 23579
 #plot(isd_poly$geometry, col=alpha("orange",0.8), add=TRUE)
 #plot(isd_pts$geometry, col="yellow", bg="black", pch=21, add=TRUE, cex=0.5)
 
-# check availability for a date range
-stations <- isd_pts[isd_pts$BEGIN <= 20140101 &
-                               isd_pts$END >= 20230101, ]
 
 #plot
 ggplot() +
