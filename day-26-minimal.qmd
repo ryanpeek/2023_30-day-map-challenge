@@ -1,0 +1,144 @@
+---
+title: '2023 30-day Map Challenge • Day 22 • North is Not Always Up'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Minimal
+
+Terminal lakes of CA
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+library(hrbrthemes)
+library(janitor)
+library(glue)
+library(patchwork)
+library(nhdplusTools)
+library(sf)
+library(ggspatial)
+library(rmapshaper)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(showtext)
+library(colorspace)
+
+# Set up fonts for plots
+font_add_google("Hepta Slab")
+font_add_google("Peralta")
+showtext_auto()
+
+
+# get state cnty boundaries
+ca <- tigris::states() |> filter(STUSPS=="CA")
+cnty <- tigris::counties(state="CA")
+
+# get flowlines based on AOI
+ca_hucs <- nhdplusTools::get_huc(ca, type = "huc08")
+# check if all same?
+all((st_geometry_type(ca_hucs)=="POLYGON")==TRUE)
+# make all same
+#ca_hucs <- st_make_valid(ca_hucs) |> st_cast("POLYGON")
+#all((st_geometry_type(ca_hucs)=="POLYGON")==TRUE)
+
+# split
+ca_hucs_ls <- split(ca_hucs, ca_hucs$huc8)
+
+# fetch one
+ca_flines_4 <- nhdplusTools::get_nhdplus(AOI = ca_hucs |> slice(1), realization = "flowline", streamorder = 4)
+
+# fetch all
+ca_flines_4 <- map(ca_hucs_ls, ~nhdplusTools::get_nhdplus(AOI = .x, realization = "flowline", streamorder = 4))
+
+# drop unused levels
+ca_flines_4_trim <- purrr::compact(ca_flines_4)
+
+# get outlet comid
+outlet_comid <- map_int(ca_flines_4_trim, ~.x$comid[which.max(.x$totdasqkm)])
+
+# grab comids upstream of outlet *within the huc8 boundaries*
+network_comids <- map2(ca_flines_4_trim, outlet_comid, ~nhdplusTools::get_UT(.x, comid = .y, distance = 50000))
+
+# quick filter
+h8_flines <- map2(ca_flines_4_trim, network_comids,
+                 ~filter(.x, .x$comid %in% .y,
+                         .x$streamorde==streamcalc))
+
+# add h8
+h8_flines <- imap(h8_flines, ~mutate(.x, h8=.y, .before="comid"))
+
+# flatten
+h8_flines_df <- do.call("rbind", h8_flines)
+
+# find terminal lines
+h8_terminal <- h8_flines_df |> 
+  filter(terminalfl==1)
+# get end points
+library(lwgeom)
+h8_term_pts <- st_endpoint(h8_terminal)
+
+
+# PLOT
+plot(ca_hucs$geometry, border=alpha("gray", 0.5))
+plot(h8_flines_df$geometry, lwd=h8_flines_df$streamorde/6, col="darkblue", add=TRUE)
+plot(h8_term_pts, col="maroon", pch=16, add=T)
+
+
+# plot
+library(ggnewscale)
+
+gg_1 <- ggplot() + 
+  geom_sf(data=ca, fill=NA, color="gray50", linewidth=1, alpha=0.4) +
+  #geom_sf(data= ca_hucs, fill=NA, color="steelblue", alpha=0.4) +
+  #coord_sf(label_graticule = "", datum = NA) +
+  geom_sf(data=h8_flines_df, aes(color=as.factor(streamorde), size=as.factor(streamorde)), show.legend = FALSE)+
+  scale_color_manual(name = "",
+                     values = rev(c('forestgreen', 'green3', 'green2', 'green', alpha('chartreuse',0.7),
+                                    alpha('chartreuse',0.7), alpha('chartreuse',0.4)))) +
+  scale_size_manual(values=c("3" = 0.1, "4" = 0.2, "5" = .45, "6" = .7, "7" = 1.2, "8"=2, "9"=3.1)) +
+  geom_sf(data=h8_term_pts, color=alpha("white",0.6), pch=16, size=4) +
+  geom_sf(data=h8_term_pts, fill="yellow", color=alpha("white",0.9), pch=21, size=2.5) +
+  hrbrthemes::theme_ft_rc(grid = FALSE, axis = FALSE) +
+  labs(title="Terminal Points to Rivers",
+       subtitle = "#30DayMapChallenge • Day-26 • Minimal",
+       caption = "R. Peek • Data: NHDPlus HUC8 Data, Stream Order >=4") +
+  theme(plot.title = 
+          element_text(family ="Hepta Slab", size = 60, color = "green2", hjust=0.5),
+        plot.subtitle = 
+          element_text(family="Hepta Slab", color = alpha("green2",0.7), size=40, hjust=0.5),
+        plot.caption = element_text(family="Hepta Slab", color="gray90",size=24, hjust=0.5),
+        legend.title = 
+          element_text(family = "Hepta Slab", face="bold", size=34),
+        legend.text = 
+          element_text(family = "Hepta Slab", face="bold", size=34),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank())
+
+gg_1
+
+ggsave(gg_1, filename = glue("figs/day26-minimal.png"), width = 11, height = 8.5, dpi = 300, bg="black")
+```
+

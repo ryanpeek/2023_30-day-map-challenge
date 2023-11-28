@@ -163,3 +163,10 @@ Black and White: as light pollution.
 Antarctica. Location of the {palmerpenguins} data set, as gleaned from the original paper. And with art from Allison Horst!
 
 ![](figs/day25-antarctica-final.png)
+
+
+### Day-26
+
+Minimal. A quick plot of HUC8 rivers of CA using the {nhdplusTools} package and identifying terminal points to rivers (Stream order 4 or greater). Using a "terminal" style.
+
+![](figs/day26-minimal.png)
