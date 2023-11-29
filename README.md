@@ -170,3 +170,10 @@ Antarctica. Location of the {palmerpenguins} data set, as gleaned from the origi
 Minimal. A quick plot of HUC8 rivers of CA using the {nhdplusTools} package and identifying terminal points to rivers (Stream order 4 or greater). Using a "terminal" style.
 
 ![](figs/day26-minimal.png)
+
+
+### Day-27
+
+Dots. A plot of temperature and flow USGS gages in the US.
+
+![](figs/day27-dots.png)

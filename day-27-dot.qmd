@@ -84,55 +84,61 @@ nwis_sites_temp <- list_rbind(nwis_sites_temp, names_to ="STUSPS") |>
   st_as_sf(coords=c("lon", "lat"), remove=FALSE, crs=4269)
 
 
-plot(us$geometry, col=alpha("gray80",0.3))
-plot(us_diss$geometry, border=alpha("blue",0.6), lwd=2, add=TRUE)
-plot(nwis_sites_flow$geometry, pch=16, cex=0.1, col=alpha("darkblue",0.5), add=TRUE)
+#plot(us$geometry, col=alpha("gray80",0.3))
+#plot(us_diss$geometry, border=alpha("blue",0.6), lwd=2, add=TRUE)
+#plot(nwis_sites_flow$geometry, pch=16, cex=0.1, col=alpha("darkblue",0.5), add=TRUE)
 
-plot(us$geometry, col=alpha("gray80",0.3))
-plot(us_diss$geometry, border=alpha("blue",0.6), lwd=2, add=TRUE)
-plot(nwis_sites_temp$geometry, pch=16, cex=0.1, col=alpha("maroon",0.5), add=TRUE)
+#plot(us$geometry, col=alpha("gray80",0.3))
+#plot(us_diss$geometry, border=alpha("blue",0.6), lwd=2, add=TRUE)
+#plot(nwis_sites_temp$geometry, pch=16, cex=0.1, col=alpha("maroon",0.5), add=TRUE)
 
-
+# Plot
 gflw <- ggplot() + 
   geom_sf(data=us, fill=NA, color="gray80", linewidth=0.5, alpha=0.4) +
-  geom_sf(data=nwis_sites_flow, color=alpha("blue", 0.5), size=0.4, pch=16) +
-  #geom_sf(data=nwis_sites_flow, color=alpha("darkblue", 0.7), size=0.4, pch=15)# +
+  geom_sf(data=nwis_sites_flow, color=alpha("steelblue", 0.5), size=0.2, pch=16) +
   hrbrthemes::theme_ipsum_rc(grid = FALSE, axis = FALSE) +
   theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank()) +
-  ggspatial::annotation_north_arrow() +
-  labs(subtitle = "Dot: Flow Gages")
+        axis.text.y = element_blank(),
+        plot.subtitle = element_text(family ="Hepta Slab", size = 30, hjust=0.5)) +
+  labs(subtitle = "Flow")
 gflw
 
 gtmp <- ggplot() + 
   geom_sf(data=us, fill=NA, color="gray70", linewidth=0.5, alpha=0.4) +
-  geom_sf(data=nwis_sites_temp, color=alpha("maroon", 0.5), size=0.2, pch=16) +
-  #geom_sf(data=nwis_sites_flow, color=alpha("darkblue", 0.7), size=0.4, pch=15)# +
+  geom_sf(data=nwis_sites_temp, color=alpha("maroon", 0.3), size=0.1, pch=16) +
   hrbrthemes::theme_ipsum_rc(grid = FALSE, axis = FALSE) +
   theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank()) +
-  labs(subtitle = "Dot: Temp Gages")
+        axis.text.y = element_blank(),
+        plot.subtitle = element_text(family ="Hepta Slab", size = 30, hjust=0.5)) +
+  labs(subtitle = "Water Temperature")
 gtmp
   
+gall <- ggplot() + 
+  geom_sf(data=us, fill=NA, color="gray70", linewidth=0.5, alpha=0.4) +
+  geom_sf(data=nwis_sites_temp, color=alpha("maroon", 0.3), size=0.1, pch=16) +
+  geom_sf(data=nwis_sites_flow, color=alpha("steelblue", 0.5), size=0.2, pch=16) +
+  hrbrthemes::theme_ipsum_rc(grid = FALSE, axis = FALSE) +
+  ggspatial::annotation_north_arrow() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank())
+gall
+
+
+
 library(patchwork)
 
-gflw + gtmp + 
-  patchwork::plot_annotation(title="Dots: USGS Gages",
-                             subtitle = "#30DayMapChallenge • Day-27 • Dot",
-                             caption = "R. Peek • Data: NHDPlus GagesII Data",
-                             theme(plot.title = 
-                                     element_text(family ="Peralta", size = 40, hjust=0.5),
-                                   plot.subtitle = 
-                                     element_text(family="Peralta", size=24, hjust=0.5),
-                                   plot.caption = element_text(family="Hepta Slab", color="gray90",size=24, hjust=0.5),
-                                   legend.title = 
-                                     element_text(family = "Hepta Slab", face="bold", size=34),
-                                   legend.text = 
-                                     element_text(family = "Hepta Slab", face="bold", size=34),
-                                   axis.text.x = element_blank(),
-                                   axis.text.y = element_blank()))
+gfinal <- (gflw + gtmp) / gall + 
+  plot_layout(widths=c(0.25, 1), heights = c(0.2, 1.5)) +
+  plot_annotation(title="USGS Gages",
+                             subtitle = "#30DayMapChallenge • Day-27 • Dots",
+                             caption = "R. Peek • Data: NHDPlus GagesII Data") & 
+  theme(
+    plot.title = element_text(family ="Peralta", size = 50, hjust=0.5),
+    plot.subtitle = element_text(family="Hepta Slab", size=34, hjust=0.5),
+    plot.caption = element_text(family="Hepta Slab", color="gray40",size=28, hjust=0.5))
 
-
-#ggsave(gg_1, filename = glue("figs/day26-minimal.png"), width = 11, height = 8.5, dpi = 300, bg="black")
+gfinal
+ggsave(gfinal, filename = "figs/day27-dots.png", 
+       width = 11, height = 8.5, dpi = 300, bg="snow2")
 ```
 
