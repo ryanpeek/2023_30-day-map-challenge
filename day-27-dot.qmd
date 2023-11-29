@@ -1,0 +1,138 @@
+---
+title: '2023 30-day Map Challenge • Day 27 • Dots'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Dots
+
+Gages?
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+library(hrbrthemes)
+library(janitor)
+library(glue)
+library(patchwork)
+library(nhdplusTools)
+library(sf)
+library(ggspatial)
+library(rmapshaper)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(showtext)
+library(colorspace)
+
+# Set up fonts for plots
+font_add_google("Hepta Slab")
+font_add_google("Peralta")
+showtext_auto()
+
+
+# get boundaries
+ca <- tigris::states() |> filter(STUSPS=="CA")
+us <- tigris::states() |> 
+  filter(!GEOID %in% c("02", "15", # HI and AK
+                       "60", "66", "69", "72", "78")) # 
+  #tigris::shift_geometry(geoid_column = "GEOID", position = "below", preserve_area = FALSE)
+
+# make a union version
+us_diss <- rmapshaper::ms_dissolve(us)
+plot(us_diss$geometry, border="blue", lwd=2)
+plot(us$geometry, add=TRUE, col="gray")
+
+# get gages based on state and param (https://help.waterdata.usgs.gov/codes-and-parameters/parameters)
+library(dataRetrieval)
+
+# this takes a sec
+nwis_sites_flow <- map(us$STUSPS, ~whatNWISsites(stateCd = .x, parameterCd=c("00060")))
+nwis_sites_flow <- set_names(nwis_sites_flow, us$STUSPS)
+nwis_sites_flow <- list_rbind(nwis_sites_flow, names_to ="STUSPS") |> 
+  rename(lat = dec_lat_va, lon = dec_long_va) |> select(-queryTime) |> 
+  mutate(param_cd="00060") |> 
+  st_as_sf(coords=c("lon", "lat"), remove=FALSE, crs=4269)
+
+# this takes a sec
+nwis_sites_temp <- map(us$STUSPS, ~whatNWISsites(stateCd = .x, parameterCd=c("00010")))
+nwis_sites_temp <- set_names(nwis_sites_temp, us$STUSPS)
+nwis_sites_temp <- list_rbind(nwis_sites_temp, names_to ="STUSPS") |> 
+  rename(lat = dec_lat_va, lon = dec_long_va) |> select(-queryTime) |> 
+  mutate(param_cd="00010") |> 
+  st_as_sf(coords=c("lon", "lat"), remove=FALSE, crs=4269)
+
+
+plot(us$geometry, col=alpha("gray80",0.3))
+plot(us_diss$geometry, border=alpha("blue",0.6), lwd=2, add=TRUE)
+plot(nwis_sites_flow$geometry, pch=16, cex=0.1, col=alpha("darkblue",0.5), add=TRUE)
+
+plot(us$geometry, col=alpha("gray80",0.3))
+plot(us_diss$geometry, border=alpha("blue",0.6), lwd=2, add=TRUE)
+plot(nwis_sites_temp$geometry, pch=16, cex=0.1, col=alpha("maroon",0.5), add=TRUE)
+
+
+gflw <- ggplot() + 
+  geom_sf(data=us, fill=NA, color="gray80", linewidth=0.5, alpha=0.4) +
+  geom_sf(data=nwis_sites_flow, color=alpha("blue", 0.5), size=0.4, pch=16) +
+  #geom_sf(data=nwis_sites_flow, color=alpha("darkblue", 0.7), size=0.4, pch=15)# +
+  hrbrthemes::theme_ipsum_rc(grid = FALSE, axis = FALSE) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank()) +
+  ggspatial::annotation_north_arrow() +
+  labs(subtitle = "Dot: Flow Gages")
+gflw
+
+gtmp <- ggplot() + 
+  geom_sf(data=us, fill=NA, color="gray70", linewidth=0.5, alpha=0.4) +
+  geom_sf(data=nwis_sites_temp, color=alpha("maroon", 0.5), size=0.2, pch=16) +
+  #geom_sf(data=nwis_sites_flow, color=alpha("darkblue", 0.7), size=0.4, pch=15)# +
+  hrbrthemes::theme_ipsum_rc(grid = FALSE, axis = FALSE) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank()) +
+  labs(subtitle = "Dot: Temp Gages")
+gtmp
+  
+library(patchwork)
+
+gflw + gtmp + 
+  patchwork::plot_annotation(title="Dots: USGS Gages",
+                             subtitle = "#30DayMapChallenge • Day-27 • Dot",
+                             caption = "R. Peek • Data: NHDPlus GagesII Data",
+                             theme(plot.title = 
+                                     element_text(family ="Peralta", size = 40, hjust=0.5),
+                                   plot.subtitle = 
+                                     element_text(family="Peralta", size=24, hjust=0.5),
+                                   plot.caption = element_text(family="Hepta Slab", color="gray90",size=24, hjust=0.5),
+                                   legend.title = 
+                                     element_text(family = "Hepta Slab", face="bold", size=34),
+                                   legend.text = 
+                                     element_text(family = "Hepta Slab", face="bold", size=34),
+                                   axis.text.x = element_blank(),
+                                   axis.text.y = element_blank()))
+
+
+#ggsave(gg_1, filename = glue("figs/day26-minimal.png"), width = 11, height = 8.5, dpi = 300, bg="black")
+```
+
