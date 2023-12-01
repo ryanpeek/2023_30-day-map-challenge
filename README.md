@@ -177,3 +177,9 @@ Minimal. A quick plot of HUC8 rivers of CA using the {nhdplusTools} package and 
 Dots. A plot of temperature and flow USGS gages in the US.
 
 ![](figs/day27-dots.png)
+
+### Day-28
+
+I think this is it! I'm done...a plot of ridges of elevation with the 5 highest peaks in CA.
+
+![](figs/day28-chart-or-map.png)
