@@ -1,0 +1,218 @@
+---
+title: '2023 30-day Map Challenge • Day 28 • Chart or Map?'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Chart or Map?
+
+get tallest mountains in CA
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+library(hrbrthemes)
+library(janitor)
+library(glue)
+library(elevatr)
+library(ggridges)
+library(patchwork)
+library(sf)
+library(terra)
+library(tidyterra)
+library(rmapshaper)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(showtext)
+library(colorspace)
+
+# Set up fonts for plots
+font_add_google("Hepta Slab")
+font_add_google("Roboto Slab")
+font_add_google("Roboto Condensed")
+showtext_auto()
+
+# get state cnty boundaries
+ca <- tigris::states() |> filter(STUSPS=="CA") |> st_transform(3310)
+cnty <- tigris::counties(state="CA") |> st_transform(3310)
+
+# get tallest mountains in CA
+if(!file.exists("data_raw/ca_elev_z9.rds")){
+  ca_elev <- elevatr::get_aws_terrain(locations = ca, z = 9, prj = 3310)
+  saveRDS(ca_elev, file = "data_raw/ca_elev_z9.rds")
+}
+ca_elev<-readRDS("data_raw/ca_elev_z9.rds") |> 
+  rename(elev_m = 1)
+  
+
+# download highest points in CA:
+# https://en.wikipedia.org/wiki/List_of_mountain_peaks_of_California
+# https://tools.wmflabs.org/kmlexport?article=List_of_mountain_peaks_of_California&section=Highest+major+summits
+pks <- st_read("data_raw/highest_peaks_ca.kml") |> st_transform(3310) |> 
+  rowid_to_column(var="ID") |> 
+  mutate(x = st_coordinates(geometry)[,1],
+         y = st_coordinates(geometry)[,2])
+
+# quick plot
+plot(ca_elev, col=viridis::viridis(256, option = "plasma"))
+plot(pks$geometry, pch=21, col=alpha("black", 0.7), bg=alpha("white", 0.5), add=TRUE)
+plot(ca$geometry, border="gray", add=TRUE)
+
+# mask to CA only
+ca_elev_mask <- mask(ca_elev, ca)
+
+# quick plot
+plot(ca_elev_mask, col=viridis::viridis(256, option = "plasma"))
+plot(pks$geometry, pch=21, col=alpha("black", 0.7), bg=alpha("white", 0.5), add=TRUE)
+plot(ca$geometry, border="black", add=TRUE, lwd=3)
+
+# make a 5 km buffer around each point and extract
+pks_buff <- st_buffer(pks, dist = 10000) |> 
+  select(ID, Name, geometry)
+
+# cast to points, get max dist from centroid to point, and then make line
+cent_to_line <- function(poly){
+  pt_poly <- st_cast(poly, "POINT")
+  pt_dists <- st_distance(pt_poly, st_centroid(poly), by_element = FALSE)
+  max_dists <- which.max(pt_dists)
+  max_pts <- pt_poly[max_dists,]
+  max_line <- st_union(max_pts, st_centroid(poly)) |> 
+    st_cast("LINESTRING") |> 
+    select(!c(ends_with(".1")))
+  return(max_line)
+}
+
+pks_lines <- pks_buff |> 
+  nest(sf = geometry) |> 
+  rowwise() |> 
+  mutate(sf = cent_to_line(sf)) |> 
+  unnest(sf) |> 
+  st_sf() |> st_transform(3310)
+
+plot(ca_elev_mask, col=viridis::viridis(256, option = "A"))
+plot(pks$geometry, pch=21, col=alpha("black", 0.7), bg=alpha("white", 0.5), add=TRUE)
+plot(pks_lines$geometry, border="yellow", add=TRUE)
+
+
+# best if in meters for distance
+bisect_line <- function(pt, distance){
+  pt1 <- st_point(c(x=st_coordinates(pt)[1]+distance, y=st_coordinates(pt)[2]))
+  pt2 <- st_point(c(x=st_coordinates(pt)[1]-distance, y=st_coordinates(pt)[2]))
+  transect_line <- st_sfc(st_linestring(
+    rbind(c(st_coordinates(pt1)[1], 
+            st_coordinates(pt1)[2]),
+          c(st_coordinates(pt2)[1], 
+            st_coordinates(pt2)[2]))))
+  return(transect_line)
+}
+
+pks_lines_2 <- pks |> 
+  select(-Description) |> 
+  nest(sf = geometry) |> 
+  rowwise() |> 
+  mutate(sf = bisect_line(sf, 11000)) |> 
+  unnest(sf) |> 
+  st_sf(crs = st_crs(3310)) |> 
+  rename(geometry = sf)
+
+# plot
+plot(ca_elev_mask, col=viridis::viridis(256, option = "G"))
+plot(pks$geometry, pch=21, col=alpha("black", 0.7), bg=alpha("white", 0.5), add=TRUE)
+plot(pks_lines_2$geometry, border="yellow", add=TRUE)
+
+# extract just these areas
+lines_df <- extract(ca_elev_mask, pks_lines_2)
+
+# adjust to lower number so not so dense
+dim(ca_elev_mask)
+fctr_rows <- round(nrow(ca_elev_mask)/120)
+ca_agg <- aggregate(ca_elev_mask, fctr_rows)
+dim(ca_agg)
+plot(ca_agg, col=viridis::viridis(256, option = "G"))
+ca_agg[ca_agg < 0] <- 0
+ca_agg[is.na(ca_agg)] <- 0
+
+# extract pixels from the aggegrated raster so coords match for plot
+pks_extract <- extract(ca_agg, pks, xy=TRUE) |> 
+  left_join(st_drop_geometry(pks) |> select(-x, -y, -Description)) |> 
+  mutate(elev_ft = elev_m*3.28084, .after=elev_m) 
+
+ca_df <- as.data.frame(ca_agg, xy = TRUE, na.rm = FALSE)
+
+# add pts and elev for peaks
+ca_dff <- bind_rows(ca_df, pks_extract)
+
+pks_5 <- pks |> dplyr::slice_min(ID, n=5)
+
+# Make a text box:
+df_text_box <- tibble(
+  x=0, y=0,
+  label = "<b style='color:#87CEFA;'>5 Highest Peaks in CA</b><br>(1)  Mount Whitney: 14,505 ft<br>(2) Mount Williamson: 14,379 ft<br>(3) White Mountain: 14,252 ft<br>(4) North Palisade: 14,248 ft<br>(5) Mount Shasta: 14,179 ft<br><i style='color:#87CEFA;'>Data: Wikipedia.org</i>")
+
+# text box
+(gtxt <- ggplot() +
+  ggtext::geom_textbox(data=df_text_box, aes(x = x, y = y, label=label),
+    box.color = "#252a32", fill="#252a32", color="white", 
+    width = unit(16, "lines"),
+    family = "Roboto Condensed", 
+    size = 12, lineheight = 0.9) +
+  coord_cartesian(expand = FALSE, clip = "off") +
+  theme_void())
+
+
+
+## ggridge
+(g1 <- ggplot() +
+  geom_sf(data = ca, color = "brown", fill = alpha("forestgreen", 0.5)) +
+  geom_ridgeline(
+    data = ca_df, aes(x = x, y = y, group = y, height = elev_m),
+    scale = 50, fill = "black", color = "white", size = .25) +
+  geom_sf(data=pks_5, col="black", pch=21, size=3, fill="#FFFACD") +
+  ggrepel::geom_label_repel(data=pks_5, 
+                            aes(label=ID, geometry=geometry), 
+                            stat = "sf_coordinates", fill="#8B3A3A",
+                            col="gray90", size=10, family="Hepta Slab") +
+  hrbrthemes::theme_ft_rc(grid = FALSE, axis = FALSE) +
+  labs(title="Elevation of CA",
+       subtitle = "#30DayMapChallenge • Day-28 • Chart or Map",
+       caption = "R. Peek • Data: {elevatr}\n<https://github.com/ryanpeek/2023_30-day-map-challenge/>") +
+  theme(plot.title = 
+          element_text(family ="Hepta Slab", size = 50, color = "white", hjust=0.5),
+        plot.subtitle = 
+          element_text(family="Hepta Slab", color = alpha("white",0.7), size=40, hjust=0.5),
+        plot.caption = element_text(family="Hepta Slab", color="gray90",size=24, hjust=0.5),
+        legend.title = 
+          element_text(family = "Hepta Slab", face="bold", size=34),
+        legend.text = 
+          element_text(family = "Hepta Slab", face="bold", size=34),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank()))
+
+## PLOT
+(gg_1 <- g1 + inset_element(gtxt, left = 0.64, bottom = .55, r = 1, t = 0.95))
+
+ggsave(gg_1, filename = glue("figs/day28-chart-or-map.png"), width = 8.5, height = 11, dpi = 300, bg="#252a32")
+```
+
