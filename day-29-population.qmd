@@ -1,0 +1,163 @@
+---
+title: '2023 30-day Map Challenge • Day 29 • Population'
+author: 'Ryan Peek'
+execute:
+  echo: false
+  warning: false
+  message: false
+format: 
+  html:
+    self-contained: true
+    code-overflow: wrap
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    theme: journal #litera #default
+    highlight-style: arrow
+editor_options: 
+  chunk_output_type: console
+---
+
+## Population
+
+Population
+
+## Data
+
+```{r}
+#| label: the-data
+#| message: false
+#| warning: false
+#| echo: true
+#| eval: false
+
+# remotes::install_github("dmurdoch/rgl", force = T)
+library(rayshader)
+library(rayrender)
+library(rgl)
+library(tidyverse)
+library(sf)
+library(janitor)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(showtext)
+library(colorspace)
+library(R.utils)
+library(RColorBrewer)
+library(stars)
+
+
+# Set up fonts for plots
+font_add_google("Hepta Slab")
+showtext_auto()
+
+# get state cnty boundaries
+ca <- tigris::states() |> filter(STUSPS=="CA")
+cnty <- tigris::counties(state="CA")
+
+#url <- 'https://geodata-eu-central-1-kontur-public.s3.amazonaws.com/kontur_datasets/kontur_population_US_20220630.gpkg.gz'
+destination_file <- 'data_raw/kontur_population_US_20220630.gpkg.gz'
+#download.file(url, destination_file, 'curl')
+
+df_pop_st <- st_read(gunzip(destination_file, remove=FALSE, skip=TRUE))
+df_pop_st <- df_pop_st |> clean_names()
+
+ca <- ca |> st_transform(st_crs(df_pop_st))
+cnty <- cnty |> st_transform(st_crs(df_pop_st))
+
+# select a few counties for now
+cnty_sel <- c("Sutter", "Yuba", "Nevada", "Placer")
+cnty_trim <- cnty |> filter(NAME %in% cnty_sel)
+
+ggplot() +
+  geom_sf(data=cnty_trim)
+
+# do intersection on data to limit kontur to states
+df_pop_ca <- st_intersection(df_pop_st, cnty_trim)
+
+# define aspect ratio based on bounding box
+bb <- st_bbox(df_pop_ca)
+
+bottom_left <- st_point(c(bb[["xmin"]], bb[["ymin"]])) |>  
+  st_sfc(crs = st_crs(df_pop_st))
+
+bottom_right <- st_point(c(bb[["xmax"]], bb[["ymin"]])) |>     st_sfc(crs = st_crs(df_pop_st))
+
+# check by plotting points
+df_pop_ca |> 
+  ggplot() +
+  geom_sf() +
+  geom_sf(data = bottom_left) +
+  geom_sf(data = bottom_right, color = "red")
+
+width <- st_distance(bottom_left, bottom_right)
+
+top_left <- st_point(c(bb[["xmin"]], bb[["ymax"]])) %>%  
+  st_sfc(crs = st_crs(df_pop_st))
+
+height <- st_distance(bottom_left, top_left)
+
+if (width > height) {
+  w_ratio <- 1
+  h_ratio <- height / width
+} else {
+  h_ration <- 1
+  w_ratio <- width / height
+}
+
+size <- 1000
+ca_rast <- stars::st_rasterize(df_pop_ca[,"population", "geom"],
+                         nx = floor(size * w_ratio),
+                         ny = floor(size * h_ratio))
+
+mat <- matrix(ca_rast$population, 
+              nrow = floor(size * w_ratio),
+              ncol = floor(size * h_ratio))
+
+mat[is.na(mat)] <- 1
+
+colors <- brewer.pal(n=9, name = "YlGnBu")
+
+texture <- grDevices::colorRampPalette(colors, bias = 3)(256)
+swatchplot(texture)
+
+rgl::close3d() # Close 
+
+mat %>% 
+  height_shade(texture = texture) %>% 
+  plot_3d(heightmap = mat,
+          zscale = 20,
+          solid = F,
+          shadowdepth = 0)
+
+render_camera(theta = -15, phi = 50, zoom = .7)
+rgl::rglwidget() # show in rstudio viewer
+
+
+outfile <- "figs/day29-population.png"
+{
+  if (!file.exists(outfile)){
+  png::writePNG(matrix(1), target = outfile)
+  }
+  
+#render_highquality(outfile,
+#                   interactive = FALSE,
+#                   lightaltitude = 70,
+#                   samples = 5000) 
+#}
+
+  render_highquality(outfile,
+                     parallel=TRUE,
+                     environment_light = "data_raw/phalzer_forest_01_4k.hdr",
+                     intensity_env = 1.5,
+                     interactive = FALSE,
+                     light = FALSE,
+                     samples = 2000) # higher number
+}
+
+```
+
+
+# see this
+https://hydroblog.netlify.app/blog/2023-01-28-graphing-using-whitewater/
